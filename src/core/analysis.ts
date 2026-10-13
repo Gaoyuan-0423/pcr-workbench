@@ -6,7 +6,7 @@ import type {
   QcFlags,
   SampleTargetResult,
 } from './types';
-import { mean, sd, oneWayAnova, significanceStars, welchTTest } from './stats';
+import { mean, sd, dunnettAdjustedP, oneWayAnova, significanceStars, welchTTest } from './stats';
 
 export interface AnalysisRow {
   id: number;
@@ -218,21 +218,56 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
       if (controls.includes(d.sample)) ctrlVals.push(...d.deltaCtValues);
     }
 
+    // 多组：ANOVA 总体检验 + Dunnett vs 对照的逐组校正 p
+    const useAnova = geneEntries.length > 2 && samples.length > 2 && ctrlVals.length >= 2;
+    let anova: ReturnType<typeof oneWayAnova> | null = null;
+    const pAdjBySample = new Map<string, number>();
+    if (useAnova) {
+      anova = oneWayAnova(groupValuesBySample(geneEntries, controls));
+      if (
+        Number.isFinite(anova.df2) &&
+        anova.df2 > 0 &&
+        Number.isFinite(anova.msWithin) &&
+        anova.msWithin > 0
+      ) {
+        const ctrlN = ctrlVals.length;
+        const comparisons: { b: number; tAbs: number }[] = [];
+        const compSamples: string[] = [];
+        for (const d of geneEntries) {
+          if (controls.includes(d.sample)) continue;
+          if (d.deltaCtValues.length < 2) continue;
+          comparisons.push({
+            b: Math.sqrt(d.deltaCtValues.length / ctrlN),
+            tAbs: Math.abs(
+              (mean(d.deltaCtValues) - ctrlMean) /
+                (Math.sqrt(anova.msWithin) *
+                  Math.sqrt(1 / d.deltaCtValues.length + 1 / ctrlN)),
+            ),
+          });
+          compSamples.push(d.sample);
+        }
+        if (comparisons.length >= 1) {
+          const adj = dunnettAdjustedP(comparisons, anova.df2);
+          compSamples.forEach((s, i) => pAdjBySample.set(s, adj[i]));
+        }
+      }
+    }
+
     for (const d of geneEntries) {
       const isControl = controls.includes(d.sample);
       const fcValues = d.deltaCtValues.map((v) => Math.pow(2, -(v - ctrlMean)));
       const fcMean = mean(fcValues);
       const fcSd = sd(fcValues);
       let pValue: number | null = null;
+      let pAdjusted: number | null = null;
       let statMethod = '';
       if (!isControl && ctrlVals.length >= 2) {
-        if (geneEntries.length > 2 && samples.length > 2) {
-          const groups = groupValuesBySample(geneEntries, controls);
-          if (groups.length >= 2) {
-            const a = oneWayAnova(groups);
-            pValue = Number.isFinite(a.p) ? a.p : null;
-            statMethod = `单因素 ANOVA（F=${a.f.toFixed(2)}, df=${a.df1}/${a.df2}）`;
-          }
+        if (useAnova && anova && Number.isFinite(anova.p)) {
+          pValue = anova.p;
+          pAdjusted = pAdjBySample.get(d.sample) ?? null;
+          statMethod = `单因素 ANOVA（F=${anova.f.toFixed(2)}, df=${anova.df1}/${anova.df2}）${
+            pAdjusted != null ? '；Dunnett vs 对照' : ''
+          }`;
         }
         if (pValue == null) {
           const t = welchTTest(d.deltaCtValues, ctrlVals);
@@ -262,7 +297,8 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
         fcMean,
         fcSd,
         pValue,
-        significance: isControl ? '' : significanceStars(pValue),
+        pAdjusted,
+        significance: isControl ? '' : significanceStars(pAdjusted ?? pValue),
         statMethod,
       });
     }

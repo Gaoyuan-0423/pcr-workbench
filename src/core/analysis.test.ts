@@ -142,11 +142,20 @@ describe('ΔΔCt 引擎（多组 + 显著性）', () => {
     expect(out.results).toHaveLength(5);
     expect(out.results[0].isControl).toBe(true);
   });
-  it('多组时用 ANOVA，处理组 p 显著', () => {
+  it('多组时用 ANOVA + Dunnett 校正，处理组 p 显著', () => {
     const t1 = out.results.find((r) => r.sample === 'T1')!;
     expect(t1.statMethod).toContain('ANOVA');
+    expect(t1.statMethod).toContain('Dunnett');
     expect(t1.pValue!).toBeLessThan(0.001);
+    expect(t1.pAdjusted).not.toBeNull();
+    expect(t1.pAdjusted!).toBeLessThan(0.05);
+    expect(t1.pAdjusted!).toBeGreaterThanOrEqual(0);
+    // 显著性星号取自校正后 p
     expect(t1.significance).toBe('***');
+  });
+  it('对照组无 Dunnett p', () => {
+    const ctrl = out.results.find((r) => r.isControl)!;
+    expect(ctrl.pAdjusted).toBeNull();
   });
   it('多内参池化：两个内参时取均值', () => {
     // 追加 ACTB 内参（恒 18），池化 refCq 应为 (20+18)/2 = 19

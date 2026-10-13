@@ -13,12 +13,12 @@ export function resultAoa(out: AnalysisOutput): (string | number)[][] {
   const header = [
     '基因 Target', '样本 Sample', '组别 Group', '是否对照 Control', '复孔数 n',
     '孔位 Wells', '平均 Cq', 'Cq SD', '内参 Cq (池化)', 'ΔCt', 'ΔΔCt',
-    'Fold Change (2^-ΔΔCt)', 'FC SD', 'p 值', '显著性', '统计方法',
+    'Fold Change (2^-ΔΔCt)', 'FC SD', 'p 值（总体）', 'Dunnett 校正 p', '显著性', '统计方法',
   ];
   const rows = out.results.map((r) => [
     r.target, r.sample, r.group || '', r.isControl ? '是' : '否', r.n,
     r.wells.join(' '), NUM(r.meanCq), NUM(r.sdCq), NUM(r.refCq), NUM(r.deltaCt), NUM(r.ddCt),
-    NUM(r.foldChange), NUM(r.fcSd), formatP(r.pValue), r.significance, r.statMethod,
+    NUM(r.foldChange), NUM(r.fcSd), formatP(r.pValue), formatP(r.pAdjusted), r.significance, r.statMethod,
   ]);
   return [header, ...rows];
 }

@@ -95,7 +95,8 @@ export default function ResultsPanel({ out, fileName, rows, flags }: Props) {
                 <th>ΔCt</th>
                 <th>ΔΔCt</th>
                 <th>Fold Change</th>
-                <th>p 值</th>
+                <th>p 值（总体）</th>
+                <th>Dunnett p</th>
                 <th>显著性</th>
                 <th>统计方法</th>
               </tr>
@@ -117,6 +118,7 @@ export default function ResultsPanel({ out, fileName, rows, flags }: Props) {
                     {fmt(r.foldChange)}±{fmt(r.fcSd)}
                   </td>
                   <td>{formatP(r.pValue)}</td>
+                  <td>{formatP(r.pAdjusted)}</td>
                   <td className="sig">{r.significance || '—'}</td>
                   <td style={{ fontSize: '0.78rem', color: 'var(--muted-text)' }}>{r.statMethod || '—'}</td>
                 </tr>
@@ -129,7 +131,7 @@ export default function ResultsPanel({ out, fileName, rows, flags }: Props) {
       <div className="card chart-box">
         <h2>
           柱状图（{activeGene || '—'}）
-          <span className="hint">均值 ± SD，星号为与对照组比较的显著性</span>
+          <span className="hint">均值 ± SD；星号为 vs 对照的校正显著性（多组时 Dunnett）</span>
         </h2>
         <ChartSvg gene={activeGene} bars={bars} svgRef={svgRef} />
         <div className="row-actions">

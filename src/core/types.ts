@@ -72,6 +72,8 @@ export interface SampleTargetResult {
   fcMean: number;
   fcSd: number;
   pValue: number | null;
+  /** 多组时 Dunnett vs 对照的校正 p；2 组 Welch 时为 null */
+  pAdjusted: number | null;
   significance: string;
   statMethod: string;
 }

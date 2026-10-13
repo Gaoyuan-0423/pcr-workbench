@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   betaInc,
+  dunnettAdjustedP,
+  erf,
   fCdf,
+  lowerGammaInc,
   mean,
   oneWayAnova,
   sd,
   significanceStars,
   studentTCdf,
   welchTTest,
+  chiSquareCdf,
+  chiSquareQuantile,
 } from './stats';
 
 describe('基础统计量', () => {
@@ -97,5 +102,63 @@ describe('显著性星号', () => {
     expect(significanceStars(0.03)).toBe('*');
     expect(significanceStars(0.2)).toBe('ns');
     expect(significanceStars(null)).toBe('');
+  });
+});
+
+describe('伽马/卡方基础', () => {
+  it('P(0.5, x) = erf(√x)', () => {
+    expect(lowerGammaInc(0.5, 1)).toBeCloseTo(erf(1), 6);
+    expect(lowerGammaInc(0.5, 2.25)).toBeCloseTo(erf(1.5), 6);
+  });
+  it('卡方 CDF 关键点与分位数往返', () => {
+    expect(chiSquareCdf(3.8414588, 1)).toBeCloseTo(0.95, 5);
+    const x = 18.307038;
+    expect(chiSquareQuantile(chiSquareCdf(x, 10), 10)).toBeCloseTo(x, 4);
+  });
+});
+
+describe('Dunnett 校正 p', () => {
+  it('k=1 时退化为普通双侧 t 检验 p 值（精确恒等）', () => {
+    for (const c of [1.5, 2.5, 3.7]) {
+      const pAdj = dunnettAdjustedP([{ b: 1, tAbs: c }], 12)[0];
+      const pT = 2 * (1 - studentTCdf(c, 12));
+      expect(pAdj).toBeCloseTo(pT, 4);
+    }
+  });
+  it('比较数越多校正越大：p_adj(k=3) ≥ p_adj(k=1)', () => {
+    const c = 2.4;
+    const p1 = dunnettAdjustedP([{ b: 1, tAbs: c }], 15)[0];
+    const p3 = dunnettAdjustedP(
+      [
+        { b: 1, tAbs: c },
+        { b: 1, tAbs: 0.3 },
+        { b: 1, tAbs: 0.2 },
+      ],
+      15,
+    )[0];
+    expect(p3).toBeGreaterThan(p1);
+  });
+  it('k=3、df=12 的 0.05 双侧临界值 ≈ 2.68（对照 Dunnett 表）', () => {
+    const pAtCrit = dunnettAdjustedP(
+      [
+        { b: 1, tAbs: 2.68 },
+        { b: 1, tAbs: 0.5 },
+        { b: 1, tAbs: 0.5 },
+      ],
+      12,
+    )[0];
+    expect(pAtCrit).toBeGreaterThan(0.03);
+    expect(pAtCrit).toBeLessThan(0.08);
+  });
+  it('不等样本量也能计算（b 不同）', () => {
+    const ps = dunnettAdjustedP(
+      [
+        { b: Math.sqrt(3 / 6), tAbs: 2.2 },
+        { b: Math.sqrt(4 / 6), tAbs: 3.1 },
+      ],
+      10,
+    );
+    expect(ps[0]).toBeGreaterThan(ps[1]);
+    expect(ps[1]).toBeLessThan(0.1);
   });
 });
