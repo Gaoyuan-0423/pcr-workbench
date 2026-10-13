@@ -4,7 +4,6 @@ import { mergeFileMatrices, type FileMatrixInput } from './merge';
 import { DEFAULT_QC } from './types';
 
 const HEADERS = ['Well Position', 'Sample Name', 'Target Name', 'Cq Mean'];
-const mappingIdx = { plate: -1, well: 0, sample: 1, group: -1, pairId: -1, target: 2, cq: 3, task: -1 };
 
 function matrix(data: (string | number)[][]): string[][] {
   return [HEADERS, ...data.map((r) => r.map(String))];
