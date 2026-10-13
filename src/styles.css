@@ -193,3 +193,13 @@ table.results .sig { font-weight: 700; color: var(--primary-dark); }
 .row-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .hint-line { color: var(--muted-text); font-size: 0.84rem; margin: 6px 0 10px; }
 .empty-note { color: var(--muted-text); text-align: center; padding: 30px 0; }
+
+/* NTC */
+td.well.ntc { background: #dce6ec; }
+td.well.ntc .wellname { color: #8a9aa3; }
+.ntc-list { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+.ntc-row { display: flex; gap: 12px; align-items: baseline; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); }
+.ntc-row .tag { margin-left: auto; color: var(--muted-text); font-size: 0.78rem; }
+.ntc-row.ntc-contaminated { background: var(--danger-light); border-color: #f3c1c1; }
+.ntc-row.ntc-late { background: var(--warning-light); border-color: #f0d48a; }
+.ntc-row.ntc-pass { background: #f2faf6; }

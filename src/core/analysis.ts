@@ -2,6 +2,7 @@ import type {
   AnalysisConfig,
   AnalysisOutput,
   ColumnMapping,
+  NtcReportEntry,
   QcFlags,
   SampleTargetResult,
 } from './types';
@@ -15,6 +16,7 @@ export interface AnalysisRow {
   group: string;
   pairId: string;
   target: string;
+  task: string;
   cq: number;
   excluded: boolean;
 }
@@ -32,12 +34,24 @@ export function extractRows(rows: string[][], mapping: ColumnMapping): AnalysisR
       group: mapping.group >= 0 ? (row[mapping.group] ?? '').trim() : '',
       pairId: mapping.pairId >= 0 ? (row[mapping.pairId] ?? '').trim() : '',
       target: mapping.target >= 0 ? (row[mapping.target] ?? '').trim() : '',
+      task: mapping.task >= 0 ? (row[mapping.task] ?? '').trim() : '',
       cq: mapping.cq >= 0 ? Number.parseFloat((row[mapping.cq] ?? '').replace(',', '.')) : NaN,
       excluded: false,
     });
   });
   return out;
 }
+
+/** NTC 判定：Task 列为 NTC，或样本名是 NTC / NTC-1 / NTC1 等惯例命名。 */
+export function isNtcRow(row: Pick<AnalysisRow, 'sample' | 'task'>): boolean {
+  const task = row.task.toLowerCase().replace(/[\s_-]+/g, '');
+  if (task === 'ntc') return true;
+  const sample = row.sample.toLowerCase().replace(/[\s_-]+/g, ' ');
+  return /^ntc(\b|$|\s|[0-9])/.test(sample.trim());
+}
+
+/** NTC 扩增 Cq 低于该值视为疑似污染；高于等于该值为晚期无害扩增。 */
+export const NTC_CONTAMINATION_CQ = 35;
 
 /**
  * ΔΔCt（Livak 2^-ΔΔCt）引擎。
@@ -49,7 +63,9 @@ export function extractRows(rows: string[][], mapping: ColumnMapping): AnalysisR
  */
 export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig): AnalysisOutput {
   const warnings: string[] = [];
-  const effective = rows.filter((r) => !r.excluded);
+  const nonExcluded = rows.filter((r) => !r.excluded);
+  const ntcRows = nonExcluded.filter(isNtcRow);
+  const effective = nonExcluded.filter((r) => !isNtcRow(r));
 
   // 1. 复孔聚合
   const agg = new Map<string, AnalysisRow[]>();
@@ -73,6 +89,41 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
   if (missingRef.length) warnings.push(`内参基因未在数据中出现：${missingRef.join('、')}`);
   const missingCtrl = config.controlSamples.filter((s) => !samples.includes(s));
   if (missingCtrl.length) warnings.push(`对照组样本未在数据中出现：${missingCtrl.join('、')}`);
+
+  // NTC 污染检查：覆盖全部基因（内参被污染同样会使 ΔCt 失效），逐基因报告
+  const ntcReport: NtcReportEntry[] = [];
+  const genesForNtc = [...new Set([...targetGenes, ...refGenes])];
+  for (const g of genesForNtc) {
+    const wells = ntcRows.filter((r) => r.target === g);
+    if (wells.length === 0) continue;
+    const cqs = wells.map((r) => r.cq).filter((v) => Number.isFinite(v));
+    const minCq = cqs.length ? Math.min(...cqs) : null;
+    let verdict: NtcReportEntry['verdict'] = 'pass';
+    let message = `NTC 无扩增（${wells.length} 孔），无污染迹象`;
+    if (minCq !== null) {
+      if (minCq < NTC_CONTAMINATION_CQ) {
+        verdict = 'contaminated';
+        message = `NTC 提前扩增（最低 Cq ${minCq.toFixed(1)}）——疑似试剂或环境污染，该基因结果不可信`;
+      } else {
+        verdict = 'late';
+        message = `NTC 晚期扩增（最低 Cq ${minCq.toFixed(1)}）——通常无害，建议复孔确认`;
+      }
+    }
+    ntcReport.push({
+      target: g,
+      wells: wells.map((r) => r.well).filter(Boolean),
+      amplified: cqs.length,
+      minCq,
+      verdict,
+      message,
+    });
+    if (verdict !== 'pass') warnings.push(`${g}：${message}`);
+  }
+  ntcReport.sort((a, b) => {
+    const rank = { contaminated: 0, late: 1, pass: 2 } as const;
+    if (rank[a.verdict] !== rank[b.verdict]) return rank[a.verdict] - rank[b.verdict];
+    return a.target.localeCompare(b.target);
+  });
 
   interface AggEntry {
     sample: string;
@@ -223,7 +274,7 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
     return a.sample.localeCompare(b.sample);
   });
 
-  return { results, refGenesUsed: refGenes, controlSamples: controls, warnings };
+  return { results, refGenesUsed: refGenes, controlSamples: controls, warnings, ntcReport };
 }
 
 function groupValuesBySample(entries: { sample: string; deltaCtValues: number[] }[], controls: string[]): number[][] {

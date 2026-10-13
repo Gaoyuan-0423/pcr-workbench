@@ -22,6 +22,7 @@ test('完整流程：导入 CFX 导出 → 映射 → 配置 → ΔΔCt 结果�
   await expect(page.locator('.check-list label', { hasText: 'GAPDH' }).locator('input')).toBeChecked();
   await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
 
+
   // 第 4 步：结果
   await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
   await expect(page.getByRole('button', { name: 'LDHA' })).toBeVisible();
@@ -79,4 +80,38 @@ test('真实 QuantStudio 384 孔导出（46 行元数据头）走通全流程', 
     page.getByRole('button', { name: '导出 Excel（多表，含 ΔΔCt）' }).click(),
   ]);
   expect(download.suggestedFilename()).toContain('xlsx');
+});
+
+test('NTC 自动识别：Task/样本名两种途径 + 污染分级告警', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('cfx-ntc-style.csv'));
+  await expect(page.getByText('已解析 cfx-ntc-style.csv')).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+
+  // NTC 检查卡片：GAPDH 通过（无扩增）、LDHA 疑似污染（Cq 33.10）、PKM 通过
+  await expect(page.getByText('NTC 污染检查')).toBeVisible();
+  await expect(page.locator('.ntc-row.ntc-pass', { hasText: 'GAPDH' })).toBeVisible();
+  await expect(page.locator('.ntc-row.ntc-contaminated', { hasText: 'LDHA' })).toBeVisible();
+  await expect(page.locator('.ntc-row.ntc-contaminated', { hasText: '33.1' })).toBeVisible();
+
+  // NTC 不出现在对照组样本列表
+  await expect(page.locator('.check-list label', { hasText: /^NTC/ })).toHaveCount(0);
+  await page.locator('.check-list label', { hasText: 'Control-1' }).locator('input').check();
+  await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
+
+  // 结果页告警横幅包含污染提示
+  await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
+  await expect(page.locator('.warning-banner')).toContainText('疑似');
+});
+
+test('QuantStudio Task=NTC（无扩增）显示通过', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('quantstudio-style.txt'));
+  await expect(page.getByText('已解析 quantstudio-style.txt')).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  await expect(page.getByText('NTC 污染检查')).toBeVisible();
+  await expect(page.locator('.ntc-row.ntc-pass', { hasText: 'GAPDH' })).toBeVisible();
+  await expect(page.locator('.ntc-row.ntc-pass', { hasText: 'BAX2' })).toBeVisible();
+  // Task=NTC 的行不进样本列表（样本名恰好也叫 NTC）
+  await expect(page.locator('.check-list label', { hasText: /^NTC/ })).toHaveCount(0);
 });

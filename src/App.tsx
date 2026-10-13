@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { get, set } from 'idb-keyval';
-import { analyzeDeltaDeltaCt, extractRows, guessRefGenes } from './core/analysis';
+import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow } from './core/analysis';
 import { computeQcFlags } from './core/qc';
 import { sniff } from './core/sniff';
 import { mappingComplete, DEFAULT_QC, emptyMapping, type AnalysisConfig, type ColumnMapping, type QcFlags } from './core/types';
@@ -100,7 +100,9 @@ export default function App() {
   const flags: QcFlags = useMemo(
     () =>
       computeQcFlags(
-        rows.map((r) => ({ id: r.id, sample: r.sample, target: r.target, cq: r.cq, excluded: r.excluded })),
+        rows
+          .filter((r) => !isNtcRow(r))
+          .map((r) => ({ id: r.id, sample: r.sample, target: r.target, cq: r.cq, excluded: r.excluded })),
         config.qc,
       ),
     [rows, config.qc],
@@ -108,7 +110,7 @@ export default function App() {
 
   const out = useMemo(
     () => (rows.length ? analyzeDeltaDeltaCt(rows, config) : null),
-    [rows, config, flags],
+    [rows, config],
   );
 
   const canGoConfig = mappingComplete(mapping);

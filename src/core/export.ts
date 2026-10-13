@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { AnalysisOutput, QcFlags } from './types';
+import type { AnalysisOutput, NtcReportEntry, QcFlags } from './types';
 import type { AnalysisRow } from './analysis';
 import { formatP } from './stats';
 
@@ -34,11 +34,28 @@ export function rawAoa(rows: AnalysisRow[], flags: QcFlags): (string | number)[]
   return [header, ...body];
 }
 
+const VERDICT_LABEL: Record<NtcReportEntry['verdict'], string> = {
+  contaminated: '⚠️ 疑似污染',
+  late: '晚期扩增',
+  pass: '✓ 通过',
+};
+
+/** NTC 污染检查表（AOA，含表头）。 */
+export function ntcAoa(report: NtcReportEntry[]): (string | number)[][] {
+  const header = ['基因 Target', 'NTC 孔数', '扩增孔数', '最低 Cq', '结论', '说明', 'NTC 孔位'];
+  const rows = report.map((e) => [
+    e.target, e.wells.length, e.amplified,
+    e.minCq != null ? NUM(e.minCq) : '未扩增',
+    VERDICT_LABEL[e.verdict], e.message, e.wells.join(' '),
+  ]);
+  return [header, ...rows];
+}
+
 function aoaToSheet(aoa: (string | number)[][]): XLSX.WorkSheet {
   return XLSX.utils.aoa_to_sheet(aoa);
 }
 
-/** 构建多 sheet 工作簿：结果 / 原始数据+QC / 项目信息。 */
+/** 构建多 sheet 工作簿：结果 / 原始数据+QC / NTC检查 / 项目信息。 */
 export function buildWorkbook(
   out: AnalysisOutput,
   rows: AnalysisRow[],
@@ -48,6 +65,9 @@ export function buildWorkbook(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, aoaToSheet(resultAoa(out)), 'ΔΔCt结果');
   XLSX.utils.book_append_sheet(wb, aoaToSheet(rawAoa(rows, flags)), '原始数据与QC');
+  if (out.ntcReport.length > 0) {
+    XLSX.utils.book_append_sheet(wb, aoaToSheet(ntcAoa(out.ntcReport)), 'NTC污染检查');
+  }
   const info: (string | number)[][] = [
     ['PCR Workbench · PCR 工作台', ''],
     ['源文件', meta.fileName],

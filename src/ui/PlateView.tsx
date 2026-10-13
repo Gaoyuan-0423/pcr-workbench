@@ -5,6 +5,7 @@ export interface PlateCell {
   target: string;
   excluded: boolean;
   flagged: boolean;
+  isNtc: boolean;
 }
 
 interface Props {
@@ -51,19 +52,24 @@ export default function PlateView({ layout, cells, onToggle }: Props) {
                       </td>
                     );
                   }
-                  const cls = ['well', cell.excluded ? 'excluded' : '', cell.flagged && !cell.excluded ? 'flagged' : '']
+                  const cls = [
+                    'well',
+                    cell.excluded ? 'excluded' : '',
+                    cell.flagged && !cell.excluded ? 'flagged' : '',
+                    cell.isNtc && !cell.excluded ? 'ntc' : '',
+                  ]
                     .filter(Boolean)
                     .join(' ');
                   return (
                     <td
                       key={well}
                       className={cls}
-                      title={`${well} · ${cell.sample} · ${cell.target}${cell.excluded ? '（已剔除）' : ''}`}
+                      title={`${well} · ${cell.isNtc ? 'NTC（无模板对照）' : cell.sample} · ${cell.target}${cell.excluded ? '（已剔除）' : ''}`}
                       onClick={() => onToggle(well)}
                     >
                       <span className="wellname">{well}</span>
-                      <span style={{ color: cell.excluded ? undefined : colorOf(cell.target) }}>
-                        {cell.sample.length > 6 ? cell.sample.slice(0, 6) : cell.sample}
+                      <span style={{ color: cell.excluded ? undefined : cell.isNtc ? '#5f7480' : colorOf(cell.target) }}>
+                        {cell.isNtc ? 'NTC' : cell.sample.length > 6 ? cell.sample.slice(0, 6) : cell.sample}
                       </span>
                     </td>
                   );
@@ -83,6 +89,10 @@ export default function PlateView({ layout, cells, onToggle }: Props) {
         <span>
           <span className="chip" style={{ background: 'repeating-linear-gradient(45deg,#f3f4f6,#f3f4f6 2px,#e5e7eb 2px,#e5e7eb 4px)', border: '1px solid #e5e7eb' }}></span>
           已剔除（点击切换）
+        </span>
+        <span>
+          <span className="chip" style={{ background: '#dce6ec', border: '1px solid #b9c9d2' }}></span>
+          NTC 无模板对照
         </span>
         <span>
           <span className="chip" style={{ boxShadow: 'inset 0 0 0 2px #d97706' }}></span>QC 标记

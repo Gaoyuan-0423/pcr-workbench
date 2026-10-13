@@ -35,6 +35,10 @@ const ALIASES: Record<ColumnKey, string[]> = {
     'cycle threshold', 'threshold cycle', 'crossing point', 'crossing threshold',
     'second derivative maximum', '定量循环数', '循环阈值', 'cq值', 'ct值', 'cp值',
   ],
+  task: [
+    'task', 'task name', 'task type', 'sample role', 'role', 'well type', 'type',
+    '任务', '任务类型', '孔类型', '样品类型',
+  ],
 };
 
 /** 表头归一化：小写、去括注、下划线/连字符转空格。 */
@@ -98,6 +102,8 @@ function contentValid(key: ColumnKey, values: string[]): boolean {
       return num < 0.75;
     case 'group':
       return num < 0.75;
+    case 'task':
+      return num < 0.5;
   }
 }
 
