@@ -119,7 +119,10 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
       <div className="card">
         <h2>
           ΔΔCt 结果表
-          <span className="hint">Livak 2^-ΔΔCt · 统计基于每个生物学重复的 ΔCt</span>
+          <span className="hint">
+            {out.effMode ? 'Pfaffl 效率校正 · ' : 'Livak 2^-ΔΔCt · '}
+            统计基于每个生物学重复的 ΔCt
+          </span>
         </h2>
         <div className="results-toolbar">
           <div className="gene-tabs" role="tablist" aria-label="选择基因">
