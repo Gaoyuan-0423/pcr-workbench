@@ -59,3 +59,24 @@ test('QuantStudio 风格（元数据行 + Tab 分隔）也能走通', async ({ p
   await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
   await expect(page.getByRole('button', { name: 'BAX2' })).toBeVisible();
 });
+
+test('真实 QuantStudio 384 孔导出（46 行元数据头）走通全流程', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('real/RELATIVE_example.csv'));
+  await expect(page.getByText('已解析 RELATIVE_example.csv')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('确认表头与列映射')).toBeVisible();
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  await expect(page.getByText('孔板布局（384孔）')).toBeVisible();
+  await page.locator('.check-list label', { hasText: 'AiW002-2-D0' }).locator('input').check();
+  // GAPDH / ACTB 均被自动识别为内参（池化）
+  await expect(page.locator('.check-list label', { hasText: 'GAPDH' }).locator('input')).toBeChecked();
+  await expect(page.locator('.check-list label', { hasText: 'ACTB' }).locator('input')).toBeChecked();
+  await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
+  await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'GRIN1' })).toBeVisible();
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: '导出 Excel（多表，含 ΔΔCt）' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toContain('xlsx');
+});

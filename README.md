@@ -1,5 +1,7 @@
 # PCR Workbench · PCR 工作台
 
+**在线使用：<https://gaoyuan-0423.github.io/pcr-workbench/>** · [仓库](https://github.com/Gaoyuan-0423/pcr-workbench)
+
 纯网页端的 qPCR 懒人分析工具：把仪器下机导出的结果文件拖进来，自动识别列和孔板，算 ΔΔCt，出可发表图表和带 ΔΔCt 的 Excel 表格。**数据只在浏览器本地处理，不上传任何服务器。**
 
 ## 功能（v0.1）
@@ -29,7 +31,7 @@ npx playwright test # E2E 冒烟（导入→映射→配置→结果→导出）
 
 技术栈：Vite + React 19 + TypeScript，纯前端，无后端。运行时依赖仅 `xlsx`（SheetJS）与 `idb-keyval`。
 
-测试数据：`tests/fixtures/` 内含 CFX / QuantStudio / LightCycler 三种风格的合成导出样本（全部数值为构造数据，非真实实验数据）。
+测试数据：`tests/fixtures/` 内含 CFX / QuantStudio / LightCycler 三种风格的合成导出样本（构造数据），`tests/fixtures/real/` 内含来自公开数据集的**真实 QuantStudio 导出**（96/384 孔，见其 PROVENANCE.md），均有回归与 E2E 覆盖。
 
 ## 隐私
 
