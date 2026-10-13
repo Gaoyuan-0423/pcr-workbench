@@ -83,11 +83,12 @@ function wellRatio(values: string[]): number {
   return values.filter((v) => WELL_FORMAT_RE.test(v.toLowerCase())).length / values.length;
 }
 
-/** 内容校验：防止数字列、孔位格式列被误配为样本/基因列。 */
-function contentValid(key: ColumnKey, values: string[]): boolean {
+/** 内容校验：防止数字列、孔位格式列被误配为样本/基因列。精确命中别名（score=100）时豁免孔位格式否决——样本名本身可能是 S1/A1 这类短名。 */
+function contentValid(key: ColumnKey, values: string[], score = 0): boolean {
   if (!values.length) return false;
   const num = values.filter((v) => NUMERIC_RE.test(v.replace(/,/g, ''))).length / values.length;
   const well = wellRatio(values);
+  const exact = score >= 100;
   switch (key) {
     case 'cq':
       return num >= 0.6;
@@ -97,7 +98,7 @@ function contentValid(key: ColumnKey, values: string[]): boolean {
     case 'pairId':
       return true;
     case 'sample':
-      return num < 0.75 && well < 0.8;
+      return num < 0.75 && (exact || well < 0.8);
     case 'target':
       return num < 0.75;
     case 'group':
@@ -158,7 +159,7 @@ export function sniff(matrix: string[][]): SniffResult {
     }
     if (bestCol >= 0) {
       const values = nonEmptyValues(matrix.slice(headerRow + 1), bestCol);
-      if (!contentValid(key, values)) {
+      if (!contentValid(key, values, best)) {
         // 内容不符：在同分或次高分列中找第一个内容合法的
         let alt = -1;
         let altBest = 0;
@@ -167,7 +168,7 @@ export function sniff(matrix: string[][]): SniffResult {
           const s = aliasScore(headers[ci] ?? '', ALIASES[key]);
           if (s > 0 && s >= altBest) {
             const vals = nonEmptyValues(matrix.slice(headerRow + 1), ci);
-            if (contentValid(key, vals)) {
+            if (contentValid(key, vals, s)) {
               alt = ci;
               altBest = s;
             }

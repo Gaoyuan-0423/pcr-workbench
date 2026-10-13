@@ -129,3 +129,18 @@ test('一键智能分析：跳过向导直接出结果与质量报告', async ({
   // NTC 污染作为严重问题出现在报告卡中
   await expect(page.locator('.issue-list li.sev-error', { hasText: 'NTC' })).toBeVisible();
 });
+
+test('多板合并：两个文件一起拖入，跨板计算 ΔΔCt', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', [fixture('merge-plate1.csv'), fixture('merge-plate2.csv')]);
+  await page.getByRole('heading', { name: '合并 2 个文件' }).waitFor({ timeout: 15_000 });
+  await expect(page.getByText('merge-plate1.csv')).toBeVisible();
+  await expect(page.getByText('merge-plate2.csv')).toBeVisible();
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  await expect(page.getByText('孔板布局（2 块板合并分析）')).toBeVisible();
+  await page.locator('.check-list label', { hasText: 'Control-1' }).locator('input').check();
+  await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
+  await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
+  // 跨板合并后 Fold Change ≈ 5.04（2^(16/3-3)）
+  await expect(page.getByText('5.04')).toBeVisible();
+});

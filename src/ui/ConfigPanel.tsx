@@ -3,7 +3,7 @@ import type { AnalysisRow } from '../core/analysis';
 import { isFlagged, isNtcRow, NTC_CONTAMINATION_CQ } from '../core/analysis';
 import { detectPlateLayout, parseWell } from '../core/plate';
 import type { AnalysisConfig, NtcReportEntry, QcFlags, QcSettings } from '../core/types';
-import PlateView, { type PlateCell } from './PlateView';
+import PlateView, { type PlateCell, type PlateGrid } from './PlateView';
 
 interface Props {
   rows: AnalysisRow[];
@@ -26,24 +26,30 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
   const genes = useMemo(() => [...new Set(rows.map((r) => r.target).filter(Boolean))].sort(), [rows]);
   const ntcCount = rows.length - nonNtcRows.length;
 
-  const layout = useMemo(() => {
-    const wells = rows.map((r) => r.well).filter(Boolean);
-    return detectPlateLayout(wells);
-  }, [rows]);
-
-  const cells = useMemo(() => {
-    const m = new Map<string, PlateCell>();
+  const plates = useMemo<PlateGrid[]>(() => {
+    const byPlate = new Map<string, AnalysisRow[]>();
     for (const r of rows) {
-      if (!parseWell(r.well)) continue;
-      m.set(wellKey(r.well), {
-        sample: r.sample,
-        target: r.target,
-        excluded: excluded[r.id] ?? false,
-        flagged: isFlagged(flags, r.id),
-        isNtc: isNtcRow(r),
-      });
+      const key = r.plate || '';
+      byPlate.set(key, [...(byPlate.get(key) ?? []), r]);
     }
-    return m;
+    const out: PlateGrid[] = [];
+    for (const [name, prows] of byPlate) {
+      const layout = detectPlateLayout(prows.map((r) => r.well).filter(Boolean));
+      if (!layout) continue;
+      const cells = new Map<string, PlateCell>();
+      for (const r of prows) {
+        if (!parseWell(r.well)) continue;
+        cells.set(wellKey(r.well), {
+          sample: r.sample,
+          target: r.target,
+          excluded: excluded[r.id] ?? false,
+          flagged: isFlagged(flags, r.id),
+          isNtc: isNtcRow(r),
+        });
+      }
+      out.push({ name, layout, cells });
+    }
+    return out;
   }, [rows, excluded, flags]);
 
   // NTC 检查预览：不依赖对照组/内参配置，直接按当前数据逐基因给出结论
@@ -82,8 +88,10 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
   const flagCount = Object.keys(flags).length;
   const excludedCount = Object.values(excluded).filter(Boolean).length;
 
-  function toggleWell(well: string) {
-    const ids = rows.filter((r) => normalizeWell(r.well) === well).map((r) => r.id);
+  function toggleWell(plateName: string, well: string) {
+    const ids = rows
+      .filter((r) => (r.plate || '') === plateName && normalizeWell(r.well) === well)
+      .map((r) => r.id);
     const anyIncluded = ids.some((id) => !excluded[id]);
     const next = { ...excluded };
     for (const id of ids) next[id] = anyIncluded;
@@ -115,13 +123,13 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
 
   return (
     <div>
-      {layout && (
+      {plates.length > 0 && (
         <div className="card">
           <h2>
-            孔板布局（{layout.kind === '384' ? '384' : layout.kind === '96' ? '96' : '自定义'}孔）
+            孔板布局（{plates.length > 1 ? `${plates.length} 块板合并分析` : plates[0].layout.kind === '384' ? '384孔' : plates[0].layout.kind === '96' ? '96孔' : '自定义孔'}）
             <span className="hint">点击孔位可剔除 / 恢复整组复孔</span>
           </h2>
-          <PlateView layout={layout} cells={cells} onToggle={toggleWell} />
+          <PlateView plates={plates} onToggle={toggleWell} />
         </div>
       )}
 

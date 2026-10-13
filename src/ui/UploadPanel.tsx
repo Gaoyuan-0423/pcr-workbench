@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
+import type { FileMatrixInput } from '../core/merge';
 import { readWorkbookFile, sheetToRawMatrix, summarizeSheet, type WorkbookFile } from '../core/parse';
 
 interface Props {
   onLoaded: (fileName: string, sheetName: string, matrix: string[][]) => void;
   onAutoFile: (file: File) => Promise<void>;
+  onMergeLoaded: (inputs: FileMatrixInput[]) => void;
 }
 
-export default function UploadPanel({ onLoaded, onAutoFile }: Props) {
+export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -14,10 +16,30 @@ export default function UploadPanel({ onLoaded, onAutoFile }: Props) {
   const [autoMode, setAutoMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File) {
+  async function handleFiles(files: File[]) {
     setError('');
+    if (files.length === 0) return;
     setBusy(true);
     try {
+      if (files.length > 1) {
+        // 多文件合并模式：每文件取数据最多的工作表
+        const inputs: FileMatrixInput[] = [];
+        for (const f of files) {
+          const wbFile = await readWorkbookFile(f);
+          const best = wbFile.sheetNames
+            .map((name) => ({ name, matrix: sheetToRawMatrix(wbFile.wb, name) }))
+            .filter((s) => s.matrix.length > 0)
+            .sort((a, b) => b.matrix.length - a.matrix.length)[0];
+          if (best) inputs.push({ fileName: f.name, matrix: best.matrix });
+        }
+        if (inputs.length === 0) {
+          setError('文件里没有可读的数据行');
+          return;
+        }
+        onMergeLoaded(inputs);
+        return;
+      }
+      const file = files[0];
       if (autoMode) {
         await onAutoFile(file);
         return;
@@ -58,13 +80,12 @@ export default function UploadPanel({ onLoaded, onAutoFile }: Props) {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          const f = e.dataTransfer.files[0];
-          if (f) void handleFile(f);
+          void handleFiles(Array.from(e.dataTransfer.files));
         }}
       >
         <div style={{ fontSize: 34 }}>🧬</div>
         <div className="big">拖入文件，或点击选择</div>
-        <div className="formats">.xlsx / .xls / .csv / .tsv / .txt</div>
+        <div className="formats">.xlsx / .xls / .csv / .tsv / .txt · 可同时拖入多块板合并分析</div>
       </div>
       <div className="row-actions" style={{ justifyContent: 'center' }}>
         <button
@@ -83,9 +104,9 @@ export default function UploadPanel({ onLoaded, onAutoFile }: Props) {
         type="file"
         accept=".xlsx,.xls,.xlsm,.csv,.tsv,.txt"
         hidden
+        multiple
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void handleFile(f);
+          void handleFiles(Array.from(e.target.files ?? []));
           e.target.value = '';
         }}
       />

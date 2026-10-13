@@ -8,77 +8,90 @@ export interface PlateCell {
   isNtc: boolean;
 }
 
-interface Props {
+export interface PlateGrid {
+  /** 板名（单文件无名板为空字符串，不显示标题） */
+  name: string;
   layout: PlateLayout;
   cells: Map<string, PlateCell>;
-  onToggle: (well: string) => void;
+}
+
+interface Props {
+  plates: PlateGrid[];
+  onToggle: (plate: string, well: string) => void;
 }
 
 const GENE_COLORS = ['#0e7c66', '#2563eb', '#b45309', '#7c3aed', '#be185d', '#0e7490', '#4d7c0f', '#b91c1c'];
 
-export default function PlateView({ layout, cells, onToggle }: Props) {
-  const names = allWellNames(layout);
-  const colHeaders = Array.from({ length: layout.colCount }, (_, i) => i + 1);
-  const genes = [...new Set([...cells.values()].map((c) => c.target))].sort();
+export default function PlateView({ plates, onToggle }: Props) {
+  const genes = [...new Set(plates.flatMap((p) => [...p.cells.values()].map((c) => c.target)))].sort();
   const colorOf = (gene: string) => GENE_COLORS[genes.indexOf(gene) % GENE_COLORS.length];
-
-  const rows: string[][] = [];
-  for (let r = 0; r < layout.rowCount; r++) {
-    rows.push(names.slice(r * layout.colCount, (r + 1) * layout.colCount));
-  }
+  const showHeadings = plates.some((p) => p.name) || plates.length > 1;
 
   return (
     <div>
-      <div className="plate-wrap">
-        <table className="plate">
-          <thead>
-            <tr>
-              <th></th>
-              {colHeaders.map((c) => (
-                <th key={c}>{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => (
-              <tr key={ri}>
-                <th>{layout.rowLabels[ri]}</th>
-                {row.map((well) => {
-                  const cell = cells.get(well);
-                  if (!cell) {
-                    return (
-                      <td key={well} className="well empty" title={`${well}（空孔）`}>
-                        <span className="wellname">{well}</span>
-                      </td>
-                    );
-                  }
-                  const cls = [
-                    'well',
-                    cell.excluded ? 'excluded' : '',
-                    cell.flagged && !cell.excluded ? 'flagged' : '',
-                    cell.isNtc && !cell.excluded ? 'ntc' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ');
-                  return (
-                    <td
-                      key={well}
-                      className={cls}
-                      title={`${well} · ${cell.isNtc ? 'NTC（无模板对照）' : cell.sample} · ${cell.target}${cell.excluded ? '（已剔除）' : ''}`}
-                      onClick={() => onToggle(well)}
-                    >
-                      <span className="wellname">{well}</span>
-                      <span style={{ color: cell.excluded ? undefined : cell.isNtc ? '#5f7480' : colorOf(cell.target) }}>
-                        {cell.isNtc ? 'NTC' : cell.sample.length > 6 ? cell.sample.slice(0, 6) : cell.sample}
-                      </span>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {plates.map((plate) => (
+        <div key={plate.name || '_'} style={plates.length > 1 ? { marginBottom: 22 } : undefined}>
+          {showHeadings && (
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', margin: '4px 0 8px' }}>
+              🧫 {plate.name || '未命名板'}
+              <span className="hint" style={{ marginLeft: 8 }}>
+                {plate.layout.kind === '384' ? '384' : plate.layout.kind === '96' ? '96' : '自定义'}孔 ·{' '}
+                {[...plate.cells.values()].filter((c) => !c.excluded).length} 孔纳入
+              </span>
+            </div>
+          )}
+          <div className="plate-wrap">
+            <table className="plate">
+              <thead>
+                <tr>
+                  <th></th>
+                  {Array.from({ length: plate.layout.colCount }, (_, i) => (
+                    <th key={i}>{i + 1}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {plateGridRows(plate.layout).map((row, ri) => (
+                  <tr key={ri}>
+                    <th>{plate.layout.rowLabels[ri]}</th>
+                    {row.map((well) => {
+                      const cell = plate.cells.get(well);
+                      if (!cell) {
+                        return (
+                          <td key={well} className="well empty" title={`${well}（空孔）`}>
+                            <span className="wellname">{well}</span>
+                          </td>
+                        );
+                      }
+                      const cls = [
+                        'well',
+                        cell.excluded ? 'excluded' : '',
+                        cell.flagged && !cell.excluded ? 'flagged' : '',
+                        cell.isNtc && !cell.excluded ? 'ntc' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ');
+                      return (
+                        <td
+                          key={well}
+                          className={cls}
+                          title={`${plate.name || '板'} · ${well} · ${cell.isNtc ? 'NTC（无模板对照）' : cell.sample} · ${cell.target}${cell.excluded ? '（已剔除）' : ''}`}
+                          onClick={() => onToggle(plate.name, well)}
+                        >
+                          <span className="wellname">{well}</span>
+                          <span style={{ color: cell.excluded ? undefined : cell.isNtc ? '#5f7480' : colorOf(cell.target) }}>
+                            {cell.isNtc ? 'NTC' : cell.sample.length > 6 ? cell.sample.slice(0, 6) : cell.sample}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
       <div className="legend">
         <span>
           <span className="chip" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb' }}></span>空孔
@@ -106,4 +119,13 @@ export default function PlateView({ layout, cells, onToggle }: Props) {
       </div>
     </div>
   );
+}
+
+function plateGridRows(layout: PlateLayout): string[][] {
+  const names = allWellNames(layout);
+  const rows: string[][] = [];
+  for (let r = 0; r < layout.rowCount; r++) {
+    rows.push(names.slice(r * layout.colCount, (r + 1) * layout.colCount));
+  }
+  return rows;
 }
