@@ -20,6 +20,27 @@
 - 不解析仪器专有二进制格式（`.eds` / `.pcrd` / `.rex` / `.ixo`）——请先在仪器软件里导出为表格文件，这也是各家仪器软件的官方推荐交换方式。
 - v1.2 不含扩增效率校正（Pfaffl 法）、标准曲线、熔解曲线自动判定——在路线图上。
 
+## 一键智能分析
+
+不想走四步向导？上传页点击 **🪄 一键智能分析**：自动识别列映射、从样本名/组别推断对照组、自动勾选常见内参基因，跑完全流程后直接给出**质量报告**——
+
+- **质量分（0–100）**：按问题严重度扣分制
+- **发现的问题**：三级分类（严重/警告/提示），覆盖 NTC 污染、无复孔、复孔高波动、内参不稳定、Cq 越界、对照组缺失、统计边界等 15+ 种规则
+- **优化方向**：每条问题给出可执行建议（多内参池化、增加重复、移液排查、NTC 排查步骤等）
+
+## 本机分析 API（可选）
+
+供脚本/其他工具调用的一键分析接口，**仅监听 127.0.0.1**，数据不离开本机、不落盘：
+
+```bash
+npm run api   # 启动于 http://127.0.0.1:4318
+
+curl -s -X POST --data-binary @result.csv \
+  "http://127.0.0.1:4318/api/analyze?filename=result.csv" | jq .
+```
+
+返回 JSON：`experiment`（自动推断的对照组/内参与依据）、`report`（score / issues / advice）、`ntc`、`results`（ΔΔCt 表，含 `pDunnett`）、`qcFlaggedRows`。另有 `GET /api/health`。
+
 ## 开发
 
 ```bash
@@ -27,7 +48,7 @@ npm install
 npm run dev        # 本地开发 http://localhost:5173
 npm test           # Vitest 单元测试（核心数学与解析逻辑）
 npm run build      # 类型检查 + 产物构建
-npx playwright test # E2E 冒烟（导入→映射→配置→结果→导出）
+npx playwright test # E2E 冒烟（含一键分析与真实文件流程）
 ```
 
 技术栈：Vite + React 19 + TypeScript，纯前端，无后端。运行时依赖仅 `xlsx`（SheetJS）与 `idb-keyval`。

@@ -3,19 +3,25 @@ import { readWorkbookFile, sheetToRawMatrix, summarizeSheet, type WorkbookFile }
 
 interface Props {
   onLoaded: (fileName: string, sheetName: string, matrix: string[][]) => void;
+  onAutoFile: (file: File) => Promise<void>;
 }
 
-export default function UploadPanel({ onLoaded }: Props) {
+export default function UploadPanel({ onLoaded, onAutoFile }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<WorkbookFile | null>(null);
+  const [autoMode, setAutoMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     setError('');
     setBusy(true);
     try {
+      if (autoMode) {
+        await onAutoFile(file);
+        return;
+      }
       const wbFile = await readWorkbookFile(file);
       const nonEmpty = wbFile.sheetNames.filter((n) => summarizeSheet(wbFile.wb, n).rowCount > 0);
       if (nonEmpty.length === 0) {
@@ -29,6 +35,7 @@ export default function UploadPanel({ onLoaded }: Props) {
       setError(`解析失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
+      setAutoMode(false);
     }
   }
 
@@ -58,6 +65,18 @@ export default function UploadPanel({ onLoaded }: Props) {
         <div style={{ fontSize: 34 }}>🧬</div>
         <div className="big">拖入文件，或点击选择</div>
         <div className="formats">.xlsx / .xls / .csv / .tsv / .txt</div>
+      </div>
+      <div className="row-actions" style={{ justifyContent: 'center' }}>
+        <button
+          className={autoMode ? 'primary' : ''}
+          disabled={busy}
+          onClick={() => {
+            setAutoMode(true);
+            inputRef.current?.click();
+          }}
+        >
+          🪄 一键智能分析：自动识别列 / 对照组 / 内参，直接出结果与质量报告
+        </button>
       </div>
       <input
         ref={inputRef}

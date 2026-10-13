@@ -115,3 +115,17 @@ test('QuantStudio Task=NTC（无扩增）显示通过', async ({ page }) => {
   // Task=NTC 的行不进样本列表（样本名恰好也叫 NTC）
   await expect(page.locator('.check-list label', { hasText: /^NTC/ })).toHaveCount(0);
 });
+
+test('一键智能分析：跳过向导直接出结果与质量报告', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /一键智能分析/ }).click();
+  await page.setInputFiles('input[type=file]', fixture('cfx-ntc-style.csv'));
+  await page.getByText('一键智能分析报告').waitFor({ timeout: 15_000 });
+  // 报告包含问题与优化方向
+  await expect(page.getByText(/发现的问题/)).toBeVisible();
+  await expect(page.getByText(/优化方向/)).toBeVisible();
+  // 直接在第 4 步，结果表可用
+  await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
+  // NTC 污染作为严重问题出现在报告卡中
+  await expect(page.locator('.issue-list li.sev-error', { hasText: 'NTC' })).toBeVisible();
+});

@@ -16,9 +16,17 @@ interface Props {
   fileName: string;
   rows: import('../core/analysis').AnalysisRow[];
   flags: import('../core/types').QcFlags;
+  autoReport?: import('../core/auto').QualityReport | null;
+  guessBasis?: string;
 }
 
-export default function ResultsPanel({ out, fileName, rows, flags }: Props) {
+const SEVERITY_LABEL: Record<string, { zh: string; cls: string }> = {
+  error: { zh: '严重', cls: 'sev-error' },
+  warning: { zh: '警告', cls: 'sev-warning' },
+  info: { zh: '提示', cls: 'sev-info' },
+};
+
+export default function ResultsPanel({ out, fileName, rows, flags, autoReport, guessBasis }: Props) {
   const genes = useMemo(() => [...new Set(out.results.map((r) => r.target))], [out.results]);
   const [gene, setGene] = useState(genes[0] ?? '');
   const svgRef = useRef<SVGSVGElement>(null);
@@ -55,6 +63,50 @@ export default function ResultsPanel({ out, fileName, rows, flags }: Props) {
 
   return (
     <div>
+      {autoReport && (
+        <div className="card report-card">
+          <div className="report-head">
+            <div
+              className="score-ring"
+              style={{ backgroundImage: `conic-gradient(${autoReport.score >= 85 ? '#16a34a' : autoReport.score >= 60 ? '#d97706' : '#dc2626'} ${autoReport.score * 1}%, #e8eef0 0)` }}
+            >
+              <span className="score-num">{autoReport.score}</span>
+              <span className="score-cap">质量分</span>
+            </div>
+            <div className="report-summary">
+              <h2 style={{ marginBottom: 4 }}>🪄 一键智能分析报告</h2>
+              <p>{autoReport.summary}</p>
+              {guessBasis && (
+                <p className="hint-line">实验配置为自动推断（{guessBasis}）。可在第 3 步调整后重新计算。</p>
+              )}
+            </div>
+          </div>
+          {autoReport.issues.length > 0 && (
+            <div className="report-section">
+              <strong>发现的问题（{autoReport.issues.length}）</strong>
+              <ul className="issue-list">
+                {autoReport.issues.map((i, idx) => (
+                  <li key={idx} className={SEVERITY_LABEL[i.severity]?.cls}>
+                    <span className="sev-chip">{SEVERITY_LABEL[i.severity]?.zh ?? i.severity}</span>
+                    <span>{i.message}</span>
+                    {i.target && <code>{i.target}</code>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {autoReport.advice.length > 0 && (
+            <div className="report-section">
+              <strong>优化方向（{autoReport.advice.length}）</strong>
+              <ul className="advice-list">
+                {autoReport.advice.map((a, idx) => (
+                  <li key={idx}>💡 {a.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
       {out.warnings.length > 0 && (
         <div className="warning-banner">
           {out.warnings.map((w, i) => (

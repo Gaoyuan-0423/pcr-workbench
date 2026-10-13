@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { get, set } from 'idb-keyval';
 import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow } from './core/analysis';
+import { analyzeFileAuto, type QualityReport } from './core/auto';
 import { computeQcFlags } from './core/qc';
 import { sniff } from './core/sniff';
 import { mappingComplete, DEFAULT_QC, emptyMapping, type AnalysisConfig, type ColumnMapping, type QcFlags } from './core/types';
@@ -34,6 +35,8 @@ export default function App() {
   const [config, setConfig] = useState<AnalysisConfig>({ controlSamples: [], refGenes: [], qc: DEFAULT_QC });
   const [toast, setToast] = useState('');
   const [restored, setRestored] = useState(false);
+  const [autoReport, setAutoReport] = useState<QualityReport | null>(null);
+  const [guessBasis, setGuessBasis] = useState('');
 
   // 恢复上次项目
   useEffect(() => {
@@ -65,6 +68,22 @@ export default function App() {
     const t = setTimeout(() => setToast(''), 3500);
     return () => clearTimeout(t);
   }, [toast]);
+
+  const handleAutoFile = useCallback(async (file: File) => {
+    const result = await analyzeFileAuto(file);
+    setFileName(result.fileName);
+    setSheetName(result.sheetName);
+    setMatrix(result.matrix);
+    setHeaderRow(result.headerRow);
+    setMapping(result.mapping);
+    setExcluded({});
+    setConfig(result.config);
+    setAutoReport(result.report);
+    setGuessBasis(result.guess.basis);
+    setRestored(false);
+    setStep(4);
+    setToast(`一键分析完成：质量分 ${result.report.score}/100 · ${result.report.summary}`);
+  }, []);
 
   const handleLoaded = useCallback((name: string, sheet: string, m: string[][]) => {
     const s = sniff(m);
@@ -137,6 +156,8 @@ export default function App() {
     setMapping(emptyMapping());
     setExcluded({});
     setConfig({ controlSamples: [], refGenes: [], qc: DEFAULT_QC });
+    setAutoReport(null);
+    setGuessBasis('');
     setRestored(false);
     setStep(1);
   }
@@ -179,7 +200,7 @@ export default function App() {
         </div>
       )}
 
-      {step === 1 && <UploadPanel onLoaded={handleLoaded} />}
+      {step === 1 && <UploadPanel onLoaded={handleLoaded} onAutoFile={handleAutoFile} />}
       {step === 2 && (
         <MappingPanel
           matrix={matrix}
@@ -199,7 +220,9 @@ export default function App() {
           onExcluded={setExcluded}
         />
       )}
-      {step === 4 && out && <ResultsPanel out={out} fileName={fileName} rows={rows} flags={flags} />}
+      {step === 4 && out && (
+        <ResultsPanel out={out} fileName={fileName} rows={rows} flags={flags} autoReport={autoReport} guessBasis={guessBasis} />
+      )}
 
       <div className="row-actions" style={{ justifyContent: 'space-between', marginTop: 8 }}>
         <span>{step > 1 && <button onClick={() => setStep(step - 1)}>← 上一步</button>}</span>

@@ -203,3 +203,26 @@ td.well.ntc .wellname { color: #8a9aa3; }
 .ntc-row.ntc-contaminated { background: var(--danger-light); border-color: #f3c1c1; }
 .ntc-row.ntc-late { background: var(--warning-light); border-color: #f0d48a; }
 .ntc-row.ntc-pass { background: #f2faf6; }
+
+/* 一键分析报告 */
+.report-head { display: flex; gap: 18px; align-items: center; margin-bottom: 14px; }
+.score-ring {
+  flex: none; width: 92px; height: 92px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: conic-gradient(var(--primary) calc(var(--score, 0) * 1%), #e8eef0 0);
+  position: relative;
+}
+.score-ring::before { content: ''; position: absolute; inset: 8px; background: #fff; border-radius: 50%; }
+.score-ring .score-num { position: relative; font-size: 1.7rem; font-weight: 800; color: var(--primary-dark); }
+.score-ring .score-cap { position: relative; font-size: 0.68rem; color: var(--muted-text); }
+.report-summary p { font-size: 0.92rem; }
+.report-section { margin-top: 12px; }
+.report-section > strong { font-size: 0.9rem; }
+.issue-list, .advice-list { list-style: none; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.issue-list li { display: flex; gap: 8px; align-items: baseline; font-size: 0.88rem; padding: 6px 10px; border-radius: 8px; background: #f6f9f8; flex-wrap: wrap; }
+.issue-list li.sev-error { background: var(--danger-light); }
+.issue-list li.sev-warning { background: var(--warning-light); }
+.sev-chip { flex: none; font-size: 0.72rem; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: #e2e8ea; color: var(--muted-text); }
+.sev-error .sev-chip { background: var(--danger); color: #fff; }
+.sev-warning .sev-chip { background: var(--warning); color: #fff; }
+.advice-list li { font-size: 0.88rem; padding: 4px 0; }
