@@ -60,7 +60,7 @@ export function buildWorkbook(
   out: AnalysisOutput,
   rows: AnalysisRow[],
   flags: QcFlags,
-  meta: { fileName: string; refGenes: string[]; controlSamples: string[] },
+  meta: { fileName: string; refGenes: string[]; controlSamples: string[]; efficiencies?: Record<string, number> },
 ): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, aoaToSheet(resultAoa(out)), 'ΔΔCt结果');
@@ -73,7 +73,10 @@ export function buildWorkbook(
     ['源文件', meta.fileName],
     ['内参基因（池化）', meta.refGenes.join('、')],
     ['对照组样本', meta.controlSamples.join('、')],
-    ['方法', 'Livak 2^-ΔΔCt；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA）'],
+    ['方法', 'Livak 2^-ΔΔCt；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA + Dunnett）'],
+    ...Object.entries(meta.efficiencies ?? {})
+      .filter(([, v]) => Number.isFinite(v) && v !== 100)
+      .map(([g, v]) => [`效率 ${g}`, `${v}%（E=${(1 + v / 100).toFixed(3)}，Pfaffl 校正生效）`]),
     ['导出时间', new Date().toLocaleString('zh-CN')],
   ];
   XLSX.utils.book_append_sheet(wb, aoaToSheet(info), '项目信息');

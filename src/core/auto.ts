@@ -205,6 +205,10 @@ export function buildQualityReport(input: ReportInput): QualityReport {
     advice.push({ code: 'REVIEW_FLAGS', message: '大量标记说明批次质量欠佳：复查操作记录，考虑整板重做' });
   }
 
+  if (output.results.length > 0 && !output.effMode) {
+    advice.push({ code: 'PFAFFL_SUGGEST', message: '若已有各基因的标准曲线，在实验配置里填入扩增效率即可启用 Pfaffl 校正（目标与内参效率差异大时 Livak 会有偏差）' });
+  }
+
   // 统计边界
   const borderline = output.results.filter((r) => r.pAdjusted != null && r.pAdjusted >= 0.05 && r.pAdjusted < 0.15);
   if (borderline.length > 0) {

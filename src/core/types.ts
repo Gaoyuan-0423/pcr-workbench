@@ -46,6 +46,8 @@ export interface AnalysisConfig {
   controlSamples: string[];
   refGenes: string[];
   qc: QcSettings;
+  /** 每基因扩增效率（百分比，100 = 恰好翻倍）；缺省按 100 处理，全部为 100 时即 Livak 法 */
+  efficiencies?: Record<string, number>;
 }
 
 /** 单孔 QC 标记原因（空数组 = 通过）。 */
@@ -97,4 +99,8 @@ export interface AnalysisOutput {
   controlSamples: string[];
   warnings: string[];
   ntcReport: NtcReportEntry[];
+  /** 任一相关基因效率 ≠ 100% 时为 true（Pfaffl 校正生效） */
+  effMode: boolean;
+  /** 实际生效的每基因效率（百分比） */
+  efficiencies: Record<string, number>;
 }

@@ -185,6 +185,39 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
         </div>
 
         <div style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            扩增效率（Pfaffl 校正，选填）
+            <span className="hint" style={{ fontWeight: 400 }}>留空 = 100%（Livak 法）。效率% = (10^(−1/斜率) − 1) × 100，来自标准曲线</span>
+          </div>
+          <div className="eff-grid">
+            {genes.map((g) => (
+              <label key={g}>
+                {g}
+                <input
+                  type="number"
+                  step="any"
+                  min={50}
+                  max={250}
+                  placeholder="100"
+                  value={config.efficiencies?.[g] ?? ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    const next = { ...(config.efficiencies ?? {}) };
+                    if (raw === '') delete next[g];
+                    else {
+                      const v = Number(raw);
+                      if (!Number.isFinite(v)) return;
+                      next[g] = Math.min(250, Math.max(50, v));
+                    }
+                    onConfig({ ...config, efficiencies: next });
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>QC 规则（留空 = 不启用）</div>
           <div className="qc-inputs">
             {qcInput('minCq', 'Cq 下限', '如 15')}

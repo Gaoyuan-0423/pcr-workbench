@@ -51,6 +51,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
       fileName,
       refGenes: out.refGenesUsed,
       controlSamples: out.controlSamples,
+      efficiencies: out.efficiencies,
     });
     downloadWorkbook(wb, baseName() + '.xlsx');
   }

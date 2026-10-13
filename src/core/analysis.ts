@@ -209,6 +209,7 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
 
   // 5. ΔΔCt / FC / 统计
   const results: SampleTargetResult[] = [];
+  let anyEffMode = false;
   for (const g of targetGenes) {
     const ctrlMean = ctrlMeanByGene.get(g);
     if (ctrlMean === undefined) continue;
@@ -217,6 +218,28 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
     for (const d of geneEntries) {
       if (controls.includes(d.sample)) ctrlVals.push(...d.deltaCtValues);
     }
+
+    // Pfaffl 效率校正：FC = E_T^(Ct_T,对照均值 − Ct_个体) / E_R^(Ct_R,对照均值 − 参照Cq_样本)
+    // 任一效率 = 100%（E=2）时公式严格退化为 Livak 2^-ΔΔCt
+    const effPct = (gene: string): number => {
+      const v = config.efficiencies?.[gene];
+      return Number.isFinite(v) && v != null ? (v as number) : 100;
+    };
+    const eTarget = 1 + effPct(g) / 100;
+    const eRef = refGenes.length ? 1 + mean(refGenes.map(effPct)) / 100 : 2;
+    const effActive = Math.abs(eTarget - 2) > 1e-9 || Math.abs(eRef - 2) > 1e-9;
+    let ctTCtrl: number | null = null;
+    {
+      const ctrlRaw: number[] = [];
+      for (const d of geneEntries) if (controls.includes(d.sample)) ctrlRaw.push(...d.values);
+      if (ctrlRaw.length) ctTCtrl = mean(ctrlRaw);
+    }
+    const ctrlRefCqs = controls
+      .map((s) => refCqBySample.get(s))
+      .filter((v): v is number => v != null);
+    const ctRCtrl = ctrlRefCqs.length ? mean(ctrlRefCqs) : null;
+    const geneEffMode = effActive && ctTCtrl != null && ctRCtrl != null;
+    if (geneEffMode) anyEffMode = true;
 
     // 多组：ANOVA 总体检验 + Dunnett vs 对照的逐组校正 p
     const useAnova = geneEntries.length > 2 && samples.length > 2 && ctrlVals.length >= 2;
@@ -255,7 +278,9 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
 
     for (const d of geneEntries) {
       const isControl = controls.includes(d.sample);
-      const fcValues = d.deltaCtValues.map((v) => Math.pow(2, -(v - ctrlMean)));
+      const fcValues = geneEffMode
+        ? d.values.map((v) => Math.pow(eTarget, (ctTCtrl as number) - v) / Math.pow(eRef, (ctRCtrl as number) - d.refCq))
+        : d.deltaCtValues.map((v) => Math.pow(2, -(v - ctrlMean)));
       const fcMean = mean(fcValues);
       const fcSd = sd(fcValues);
       let pValue: number | null = null;
@@ -274,6 +299,7 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
           pValue = Number.isFinite(t.p) ? t.p : null;
           statMethod = `Welch t（t=${t.t.toFixed(2)}, df=${Number.isFinite(t.df) ? t.df.toFixed(1) : '-'}）`;
         }
+        if (geneEffMode) statMethod += '；FC 经 Pfaffl 效率校正';
       }
       const deltaCt = mean(d.deltaCtValues);
       const ddCt = deltaCt - ctrlMean;
@@ -292,7 +318,7 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
         deltaCt,
         deltaCtValues: d.deltaCtValues,
         ddCt,
-        foldChange: Math.pow(2, -ddCt),
+        foldChange: geneEffMode ? fcMean : Math.pow(2, -ddCt),
         fcValues,
         fcMean,
         fcSd,
@@ -310,7 +336,15 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
     return a.sample.localeCompare(b.sample);
   });
 
-  return { results, refGenesUsed: refGenes, controlSamples: controls, warnings, ntcReport };
+  return {
+    results,
+    refGenesUsed: refGenes,
+    controlSamples: controls,
+    warnings,
+    ntcReport,
+    effMode: anyEffMode,
+    efficiencies: { ...(config.efficiencies ?? {}) },
+  };
 }
 
 function groupValuesBySample(entries: { sample: string; deltaCtValues: number[] }[], controls: string[]): number[][] {
