@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { parseRdml } from './rdml';
 import type { SheetMatrix } from './types';
 
 const EXCEL_EXTS = new Set(['xlsx', 'xls', 'xlsm', 'xlsb']);
@@ -72,16 +73,40 @@ export interface WorkbookFile {
   wb: XLSX.WorkBook;
 }
 
-/** 读取用户文件：Excel 走二进制，CSV/TSV/TXT 走文本（UTF-8 → GBK 回落）。 */
-export async function readWorkbookFile(file: File): Promise<WorkbookFile> {
+export interface RdmlFile {
+  kind: 'rdml';
+  fileName: string;
+  matrix: string[][];
+  targetEfficiencies: Record<string, number>;
+}
+
+/** 读取用户文件：Excel 走二进制，CSV/TSV/TXT 走文本（UTF-8 → GBK 回落），RDML 走标准解析器。 */
+export async function readInputFile(file: File): Promise<WorkbookFile | RdmlFile> {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'rdml') {
+    const parsed = parseRdml(await file.arrayBuffer());
+    return { kind: 'rdml', fileName: file.name, matrix: parsed.matrix, targetEfficiencies: parsed.targetEfficiencies };
+  }
   if (EXCEL_EXTS.has(ext)) {
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
     return { kind: 'workbook', fileName: file.name, sheetNames: wb.SheetNames, wb };
   }
   const text = decodeText(await file.arrayBuffer());
+  // ZIP 魔数 + 无扩展名的 RDML
+  const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  if (head[0] === 0x50 && head[1] === 0x4b) {
+    const parsed = parseRdml(await file.arrayBuffer());
+    return { kind: 'rdml', fileName: file.name, matrix: parsed.matrix, targetEfficiencies: parsed.targetEfficiencies };
+  }
   const wb = XLSX.read(text, { type: 'string', raw: false });
   return { kind: 'workbook', fileName: file.name, sheetNames: wb.SheetNames, wb };
+}
+
+/** 兼容旧调用名（工作簿场景）。 */
+export async function readWorkbookFile(file: File): Promise<WorkbookFile> {
+  const r = await readInputFile(file);
+  if (r.kind === 'rdml') throw new Error('RDML 文件请使用 readInputFile');
+  return r;
 }
 
 /** 生成 sheet 摘要供多 sheet 选择 UI 使用。 */

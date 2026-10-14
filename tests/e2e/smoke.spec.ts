@@ -156,3 +156,14 @@ test('标准曲线自动拟合：Task=STANDARD + Quantity 一键应用效率', a
   await expect(page.getByText(/Pfaffl 效率校正 · /)).toBeVisible();
   await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
 });
+
+test('RDML 标准格式直接导入（真实 StepOne 文件）', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /一键智能分析/ }).click();
+  await page.setInputFiles('input[type=file]', fixture('real/stepone_std.rdml'));
+  await page.getByText('一键智能分析报告').waitFor({ timeout: 15_000 });
+  // RDML 靶标声明效率已应用（RNase P 93.9%）
+  await expect(page.locator('.issue-list li', { hasText: 'RDML 靶标声明效率已应用' })).toBeVisible();
+  // 只有内参基因 → 明确提示
+  await expect(page.locator('.issue-list li.sev-error', { hasText: '内参基因' })).toBeVisible();
+});

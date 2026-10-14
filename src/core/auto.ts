@@ -4,7 +4,7 @@
 
 import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow, type AnalysisRow } from './analysis';
 import { computeQcFlags } from './qc';
-import { readWorkbookFile, sheetToRawMatrix } from './parse';
+import { readInputFile, sheetToRawMatrix } from './parse';
 import { sniff } from './sniff';
 import { fitAllStandardCurves } from './standard';
 import { sd } from './stats';
@@ -244,7 +244,10 @@ export function buildQualityReport(input: ReportInput): QualityReport {
 }
 
 /** 一键分析：单工作表矩阵 → 全流程结果。 */
-export function analyzeAuto(matrix: string[][], opts: { fileName?: string; sheetName?: string } = {}): AutoAnalysisResult {
+export function analyzeAuto(
+  matrix: string[][],
+  opts: { fileName?: string; sheetName?: string; presetEfficiencies?: Record<string, number> } = {},
+): AutoAnalysisResult {
   const s = sniff(matrix);
   const rows = extractRows(matrix.slice(s.headerRow + 1), s.mapping);
   const samples = [...new Set(rows.filter((r) => !isNtcRow(r) && !isStandardRow(r)).map((r) => r.sample).filter(Boolean))].sort();
@@ -259,7 +262,16 @@ export function analyzeAuto(matrix: string[][], opts: { fileName?: string; sheet
     curveEfficiencies[gene] = Math.round(curve.effPct * 10) / 10;
   }
 
-  const config: AnalysisConfig = { controlSamples: guess.controlSamples, refGenes: guess.refGenes, qc: { minCq: NaN, maxCq: NaN, absDev: NaN, zScore: NaN }, efficiencies: Object.keys(curveEfficiencies).length ? curveEfficiencies : undefined };
+  // 预置效率（如 RDML 靶标声明）先入，标准曲线实测拟合优先覆盖
+  const mergedEfficiencies: Record<string, number> = { ...(opts.presetEfficiencies ?? {}) };
+  for (const [gene, v] of Object.entries(curveEfficiencies)) mergedEfficiencies[gene] = v;
+
+  const config: AnalysisConfig = {
+    controlSamples: guess.controlSamples,
+    refGenes: guess.refGenes,
+    qc: { minCq: NaN, maxCq: NaN, absDev: NaN, zScore: NaN },
+    efficiencies: Object.keys(mergedEfficiencies).length ? mergedEfficiencies : undefined,
+  };
   const flags = computeQcFlags(
     rows.filter((r) => !isNtcRow(r)).map((r) => ({ id: r.id, sample: r.sample, target: r.target, cq: r.cq, excluded: r.excluded })),
     config.qc,
@@ -307,9 +319,27 @@ export interface AnalyzeFileOptions {
   sheet?: 'largest' | 'first';
 }
 
-/** 一键分析：File 对象 → 全流程结果（浏览器与 Node 通用）。 */
+/** 一键分析：File 对象 → 全流程结果（浏览器与 Node 通用）。支持 RDML 标准格式。 */
 export async function analyzeFileAuto(file: File, opts: AnalyzeFileOptions = {}): Promise<AutoAnalysisResult & { matrix: string[][] }> {
-  const wbFile = await readWorkbookFile(file);
+  const parsed = await readInputFile(file);
+  if (parsed.kind === 'rdml') {
+    const result = analyzeAuto(parsed.matrix, {
+      fileName: file.name,
+      sheetName: 'RDML',
+      presetEfficiencies: parsed.targetEfficiencies,
+    });
+    if (Object.keys(parsed.targetEfficiencies).length) {
+      result.report.issues.unshift({
+        code: 'RDML_EFFICIENCY_APPLIED',
+        severity: 'info',
+        message: `RDML 靶标声明效率已应用：${Object.entries(parsed.targetEfficiencies)
+          .map(([g, v]) => `${g} ${v.toFixed(1)}%`)
+          .join('、')}`,
+      });
+    }
+    return { ...result, matrix: parsed.matrix };
+  }
+  const wbFile = parsed;
   const summaries = wbFile.sheetNames
     .map((name) => ({ name, matrix: sheetToRawMatrix(wbFile.wb, name) }))
     .filter((s) => s.matrix.length > 0);
