@@ -5,12 +5,15 @@
 
 import { unzipSync } from 'fflate';
 import { XMLParser } from 'fast-xml-parser';
+import type { RdmlMeltCurve } from './melt';
 
 export interface RdmlParseResult {
   matrix: string[][];
   /** RDML 靶标声明的扩增效率（百分比，已按数值大小归一化） */
   targetEfficiencies: Record<string, number>;
   runCount: number;
+  /** 原始熔解曲线（mdp 数据点），供熔解 QC 峰检测 */
+  meltCurves: RdmlMeltCurve[];
 }
 
 const parser = new XMLParser({
@@ -123,6 +126,7 @@ export function parseRdml(input: Uint8Array | ArrayBuffer): RdmlParseResult {
   }
 
   const rows: string[][] = [];
+  const meltCurves: RdmlMeltCurve[] = [];
   let runCount = 0;
   const experiments = asArray<any>(root.experiment);
   const expList = experiments.length ? experiments : [{ '@_id': '', run: root.run }];
@@ -148,19 +152,32 @@ export function parseRdml(input: Uint8Array | ArrayBuffer): RdmlParseResult {
           const tid = String(data?.tar?.['@_id'] ?? '');
           if (!tid) continue;
           const cq = num(data.cq);
+          const gene = targetName.get(tid) || tid;
           rows.push([
             plate,
             well,
             sName,
-            targetName.get(tid) || tid,
+            gene,
             task,
             Number.isFinite(cq) ? String(cq) : '',
             qty != null ? String(qty) : '',
           ]);
+          const mdp = asArray<any>(data.mdp);
+          if (mdp.length >= 5) {
+            meltCurves.push({
+              plate,
+              well,
+              sample: sName,
+              target: gene,
+              points: mdp
+                .map((m) => ({ tmp: num(m.tmp), fluor: num(m.fluor) }))
+                .filter((m) => Number.isFinite(m.tmp) && Number.isFinite(m.fluor)),
+            });
+          }
         }
       }
     }
   }
 
-  return { matrix: [HEADERS, ...rows], targetEfficiencies: targetEff, runCount };
+  return { matrix: [HEADERS, ...rows], targetEfficiencies: targetEff, runCount, meltCurves };
 }

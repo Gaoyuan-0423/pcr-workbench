@@ -12,6 +12,8 @@
 | `BioRad_qPCR_melt.rdml` | 同上 | **真实 RDML 1.1**（Bio-Rad）：带前缀命名空间、ntc 样本 |
 | `multi_run.rdml` / `wt_mt.rdml` / `qiagen_rotor_gene.rdml` | [Q-Prism-SNP-visualizer](https://github.com/Key-man-fromArchive/Q-Prism-SNP-visualizer) 测试固件 | 合成最小 RDML（无 Cq，仅结构参考） |
 
+| `MeltingCurvesLorenzo.csv` | [derele/Mouse_Eimeria_Field](https://github.com/derele/Mouse_Eimeria_Field)（公开科研数据） | **真实 LightCycler 熔解摘要表**（每孔峰值数 No. Tm + Tm 值），供熔解摘要表格式支持参考 |
+
 注：三个真实 `.rdml` 来自 GPL-3 许可的 RDML R 包随附的仪器导出示例数据，本仓库仅用作解析器回归测试。
 
 这些文件中的实验数据本身是公开数据集的一部分，按上游仓库的 MIT 许可随本仓库分发。若要补充其他仪器（CFX / LightCycler / Rotor-Gene）的真实导出样本，请确认许可后放入本目录并在此登记。

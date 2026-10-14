@@ -74,6 +74,7 @@ export function createAnalyzerServer(): Server {
                 significance: r.significance,
                 statMethod: r.statMethod,
               })),
+              melt: result.melt,
               qcFlaggedRows: Object.entries(result.flags).map(([id, reasons]) => ({ id: Number(id), reasons })),
               meta: {
                 generator: 'PCR Workbench · PCR 工作台',

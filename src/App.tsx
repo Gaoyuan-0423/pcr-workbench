@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { get, set } from 'idb-keyval';
 import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow, type AnalysisRow } from './core/analysis';
 import { analyzeFileAuto, type QualityReport } from './core/auto';
+import type { MeltGeneSummary } from './core/melt';
 import { mergeFileMatrices, type FileMatrixInput, type PerFileInfo } from './core/merge';
 import MergeSummaryPanel from './ui/MergeSummaryPanel';
 import { computeQcFlags } from './core/qc';
@@ -40,6 +41,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [restored, setRestored] = useState(false);
   const [autoReport, setAutoReport] = useState<QualityReport | null>(null);
+  const [autoMelt, setAutoMelt] = useState<MeltGeneSummary[]>([]);
   const [guessBasis, setGuessBasis] = useState('');
   const [merged, setMerged] = useState<{ rows: AnalysisRow[]; perFile: PerFileInfo[] } | null>(null);
 
@@ -87,6 +89,7 @@ export default function App() {
     setExcluded({});
     setConfig({ controlSamples: [], refGenes: guessRefGenes(genes), qc: DEFAULT_QC });
     setAutoReport(null);
+    setAutoMelt([]);
     setGuessBasis('');
     setRestored(false);
     setStep(2);
@@ -103,6 +106,7 @@ export default function App() {
     setExcluded({});
     setConfig(result.config);
     setAutoReport(result.report);
+    setAutoMelt(result.melt ?? []);
     setGuessBasis(result.guess.basis);
     setRestored(false);
     setStep(4);
@@ -185,6 +189,7 @@ export default function App() {
     setExcluded({});
     setConfig({ controlSamples: [], refGenes: [], qc: DEFAULT_QC });
     setAutoReport(null);
+    setAutoMelt([]);
     setGuessBasis('');
     setMerged(null);
     setRestored(false);
@@ -253,7 +258,7 @@ export default function App() {
         />
       )}
       {step === 4 && out && (
-        <ResultsPanel out={out} fileName={fileName} rows={rows} flags={flags} autoReport={autoReport} guessBasis={guessBasis} />
+        <ResultsPanel out={out} fileName={fileName} rows={rows} flags={flags} autoReport={autoReport} guessBasis={guessBasis} autoMelt={autoMelt} />
       )}
 
       <div className="row-actions" style={{ justifyContent: 'space-between', marginTop: 8 }}>

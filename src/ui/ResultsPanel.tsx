@@ -18,6 +18,7 @@ interface Props {
   flags: import('../core/types').QcFlags;
   autoReport?: import('../core/auto').QualityReport | null;
   guessBasis?: string;
+  autoMelt?: import('../core/melt').MeltGeneSummary[];
 }
 
 const SEVERITY_LABEL: Record<string, { zh: string; cls: string }> = {
@@ -26,7 +27,7 @@ const SEVERITY_LABEL: Record<string, { zh: string; cls: string }> = {
   info: { zh: '提示', cls: 'sev-info' },
 };
 
-export default function ResultsPanel({ out, fileName, rows, flags, autoReport, guessBasis }: Props) {
+export default function ResultsPanel({ out, fileName, rows, flags, autoReport, guessBasis, autoMelt }: Props) {
   const genes = useMemo(() => [...new Set(out.results.map((r) => r.target))], [out.results]);
   const [gene, setGene] = useState(genes[0] ?? '');
   const svgRef = useRef<SVGSVGElement>(null);
@@ -52,6 +53,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
       refGenes: out.refGenesUsed,
       controlSamples: out.controlSamples,
       efficiencies: out.efficiencies,
+      melt: autoMelt,
     });
     downloadWorkbook(wb, baseName() + '.xlsx');
   }
@@ -106,6 +108,29 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
               </ul>
             </div>
           )}
+        </div>
+      )}
+      {autoMelt && autoMelt.length > 0 && (
+        <div className="card">
+          <h2>
+            熔解曲线检查
+            <span className="hint">由 RDML 原始熔解数据峰检测；多峰提示非特异扩增或引物二聚体</span>
+          </h2>
+          <div className="std-list">
+            {autoMelt.map((m) => (
+              <div className={`std-row ${m.multi.length > 0 ? 'std-warn' : 'std-good'}`} key={m.gene}>
+                <strong>{m.gene}</strong>
+                <span>
+                  {m.checked} 孔：单峰 {m.single} · 多峰 {m.multi.length}
+                  {m.multi.length > 0 && m.multi[0].tm != null ? `（${m.multi.map((w) => `${w.well}@${w.tm}°C`).join('、')}）` : ''} ·
+                  无峰 {m.none}
+                </span>
+                <span className="tag" style={{ marginLeft: 'auto' }}>
+                  {m.multi.length > 0 ? '⚠️ 建议跑胶确认产物特异性' : '✓ 通过'}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {out.warnings.length > 0 && (

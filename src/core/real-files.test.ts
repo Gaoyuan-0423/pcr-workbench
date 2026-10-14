@@ -23,6 +23,8 @@ const files = readdirSync(REAL_DIR).filter((f) => /\.(csv|txt|tsv)$/i.test(f));
 
 describe.skipIf(files.length === 0)('真实仪器导出文件（tests/fixtures/real）', () => {
   for (const file of files) {
+    // 熔解摘要表（LightCycler No. Tm 格式）不是定量表，无 样本/基因/Cq 三列语义
+    if (/melt/i.test(file)) continue;
     it(`${file}：表头检测 + 必需列映射完成 + 数据行非空`, () => {
       const matrix = loadMatrix(file);
       expect(matrix.length).toBeGreaterThan(5);

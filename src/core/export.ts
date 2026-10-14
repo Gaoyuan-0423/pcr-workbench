@@ -55,18 +55,37 @@ function aoaToSheet(aoa: (string | number)[][]): XLSX.WorkSheet {
   return XLSX.utils.aoa_to_sheet(aoa);
 }
 
-/** 构建多 sheet 工作簿：结果 / 原始数据+QC / NTC检查 / 项目信息。 */
+/** 熔解检查表（AOA，含表头）。 */
+export function meltAoa(melt: { gene: string; checked: number; single: number; none: number; multi: { sample: string; well: string; tm: number | null }[] }[]): (string | number)[][] {
+  const header = ['基因 Target', '检查孔数', '单峰（通过）', '多峰（非特异）', '无峰', '多峰孔位与 Tm'];
+  const rows = melt.map((m) => [
+    m.gene, m.checked, m.single, m.multi.length, m.none,
+    m.multi.map((w) => `${w.sample}@${w.well} ${w.tm ?? '—'}°C`).join('；'),
+  ]);
+  return [header, ...rows];
+}
+
+/** 构建多 sheet 工作簿：结果 / 原始数据+QC / NTC检查 / 熔解检查 / 项目信息。 */
 export function buildWorkbook(
   out: AnalysisOutput,
   rows: AnalysisRow[],
   flags: QcFlags,
-  meta: { fileName: string; refGenes: string[]; controlSamples: string[]; efficiencies?: Record<string, number> },
+  meta: {
+    fileName: string;
+    refGenes: string[];
+    controlSamples: string[];
+    efficiencies?: Record<string, number>;
+    melt?: { gene: string; checked: number; single: number; none: number; multi: { sample: string; well: string; tm: number | null }[] }[];
+  },
 ): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, aoaToSheet(resultAoa(out)), 'ΔΔCt结果');
   XLSX.utils.book_append_sheet(wb, aoaToSheet(rawAoa(rows, flags)), '原始数据与QC');
   if (out.ntcReport.length > 0) {
     XLSX.utils.book_append_sheet(wb, aoaToSheet(ntcAoa(out.ntcReport)), 'NTC污染检查');
+  }
+  if (meta.melt && meta.melt.length > 0) {
+    XLSX.utils.book_append_sheet(wb, aoaToSheet(meltAoa(meta.melt)), '熔解检查');
   }
   const info: (string | number)[][] = [
     ['PCR Workbench · PCR 工作台', ''],

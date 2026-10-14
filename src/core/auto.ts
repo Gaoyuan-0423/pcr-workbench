@@ -7,6 +7,7 @@ import { computeQcFlags } from './qc';
 import { readInputFile, sheetToRawMatrix } from './parse';
 import { sniff } from './sniff';
 import { fitAllStandardCurves } from './standard';
+import { summarizeMeltByGene, type RdmlMeltCurve } from './melt';
 import { sd } from './stats';
 import { isStandardRow } from './analysis';
 import { mappingComplete, type AnalysisConfig, type AnalysisOutput, type ColumnMapping, type QcFlags } from './types';
@@ -54,6 +55,8 @@ export interface AutoAnalysisResult {
   flags: QcFlags;
   output: AnalysisOutput;
   report: QualityReport;
+  /** 熔解曲线按基因汇总（RDML 原始曲线可用时） */
+  melt: ReturnType<typeof summarizeMeltByGene>;
 }
 
 const CONTROL_KEYWORDS = [
@@ -246,7 +249,7 @@ export function buildQualityReport(input: ReportInput): QualityReport {
 /** 一键分析：单工作表矩阵 → 全流程结果。 */
 export function analyzeAuto(
   matrix: string[][],
-  opts: { fileName?: string; sheetName?: string; presetEfficiencies?: Record<string, number> } = {},
+  opts: { fileName?: string; sheetName?: string; presetEfficiencies?: Record<string, number>; meltCurves?: RdmlMeltCurve[] } = {},
 ): AutoAnalysisResult {
   const s = sniff(matrix);
   const rows = extractRows(matrix.slice(s.headerRow + 1), s.mapping);
@@ -295,6 +298,22 @@ export function analyzeAuto(
       message: `标准曲线已应用：n=${curve.n}，斜率 ${curve.slope.toFixed(3)}，R²=${curve.r2.toFixed(4)}，效率 ${curve.effPct.toFixed(1)}%${Math.abs(curve.effPct - 100) > 10 ? '（超出 90–110% 常规区间，建议检查引物）' : ''}`,
     });
   }
+
+  // 熔解曲线 QC：多峰 = 非特异扩增 / 引物二聚体
+  const melt = summarizeMeltByGene(opts.meltCurves ?? []);
+  for (const m of melt) {
+    if (m.multi.length > 0) {
+      report.issues.push({
+        code: 'MELT_MULTI_PEAK',
+        severity: 'warning',
+        target: m.gene,
+        message: `熔解曲线多峰（${m.multi.length}/${m.checked} 孔，Tm ${m.multi
+          .slice(0, 3)
+          .map((w) => `${w.well}@${w.tm}°C`)
+          .join('、')}）——可能非特异扩增或引物二聚体`,
+      });
+    }
+  }
   report.score = Math.max(
     0,
     Math.min(100, 100 - report.issues.reduce((sum, i) => sum + SEVERITY_PENALTY[i.severity], 0)),
@@ -311,6 +330,7 @@ export function analyzeAuto(
     flags,
     output,
     report,
+    melt,
   };
 }
 
@@ -327,6 +347,7 @@ export async function analyzeFileAuto(file: File, opts: AnalyzeFileOptions = {})
       fileName: file.name,
       sheetName: 'RDML',
       presetEfficiencies: parsed.targetEfficiencies,
+      meltCurves: parsed.meltCurves,
     });
     if (Object.keys(parsed.targetEfficiencies).length) {
       result.report.issues.unshift({

@@ -78,6 +78,7 @@ export interface RdmlFile {
   fileName: string;
   matrix: string[][];
   targetEfficiencies: Record<string, number>;
+  meltCurves: import('./melt').RdmlMeltCurve[];
 }
 
 /** 读取用户文件：Excel 走二进制，CSV/TSV/TXT 走文本（UTF-8 → GBK 回落），RDML 走标准解析器。 */
@@ -85,7 +86,13 @@ export async function readInputFile(file: File): Promise<WorkbookFile | RdmlFile
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
   if (ext === 'rdml') {
     const parsed = parseRdml(await file.arrayBuffer());
-    return { kind: 'rdml', fileName: file.name, matrix: parsed.matrix, targetEfficiencies: parsed.targetEfficiencies };
+    return {
+      kind: 'rdml',
+      fileName: file.name,
+      matrix: parsed.matrix,
+      targetEfficiencies: parsed.targetEfficiencies,
+      meltCurves: parsed.meltCurves,
+    };
   }
   if (EXCEL_EXTS.has(ext)) {
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
@@ -96,7 +103,13 @@ export async function readInputFile(file: File): Promise<WorkbookFile | RdmlFile
   const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
   if (head[0] === 0x50 && head[1] === 0x4b) {
     const parsed = parseRdml(await file.arrayBuffer());
-    return { kind: 'rdml', fileName: file.name, matrix: parsed.matrix, targetEfficiencies: parsed.targetEfficiencies };
+    return {
+      kind: 'rdml',
+      fileName: file.name,
+      matrix: parsed.matrix,
+      targetEfficiencies: parsed.targetEfficiencies,
+      meltCurves: parsed.meltCurves,
+    };
   }
   const wb = XLSX.read(text, { type: 'string', raw: false });
   return { kind: 'workbook', fileName: file.name, sheetNames: wb.SheetNames, wb };
