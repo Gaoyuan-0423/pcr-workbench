@@ -34,6 +34,7 @@ const ALIASES: Record<ColumnKey, string[]> = {
     'ct average', 'cq avg', 'ct avg', 'cq value', 'ct value', 'quantification cycle',
     'cycle threshold', 'threshold cycle', 'crossing point', 'crossing threshold',
     'second derivative maximum', '定量循环数', '循环阈值', 'cq值', 'ct值', 'cp值',
+    'ct平均值', 'ct均值', '平均ct', '平均cq', 'cq平均值', 'cq均值',
   ],
   task: [
     'task', 'task name', 'task type', 'sample role', 'role', 'well type', 'type',
@@ -60,17 +61,20 @@ const DATE_RE = /\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/;
 const WELL_FORMAT_RE = /^[a-z]{1,2}\s*0*\d{1,3}$/;
 const NUMERIC_RE = /^\s*[+-]?(\d+[.,]?\d*|[.,]\d+)([eE][+-]?\d+)?\s*$/;
 
-/** 别名匹配打分：精确 100 > 前/后缀 75 > 包含 55（含 4 字符以上）。 */
+/** 别名匹配打分：精确 100 > 前缀 75（含 CJK 无空格续写，如 ct平均值）> 包含 55（≥4 字符）。 */
 function aliasScore(header: string, aliases: string[]): number {
   let best = 0;
   for (const alias of aliases) {
     if (header === alias) return 100;
-    if (header.startsWith(alias + ' ') || header.endsWith(' ' + alias)) best = Math.max(best, 75);
+    if (header.startsWith(alias)) best = Math.max(best, 75);
+    else if (header.endsWith(' ' + alias)) best = Math.max(best, 75);
     else if (alias.length >= 4 && header.includes(alias)) best = Math.max(best, 55);
-    else if (alias.length < 4 && header === alias) best = Math.max(best, 100);
   }
   return best;
 }
+
+/** 离散度指标表头（变异系数/标准差等）——是统计量不是数值本身，永不做 Cq 列。 */
+const DISPERSION_RE = /(^|\s)(cv|sd|std|dev)(\s|$)|%|标准差|变异|误差/;
 
 function nonEmptyValues(rows: string[][], col: number): string[] {
   const out: string[] = [];
@@ -157,7 +161,9 @@ export function sniff(matrix: string[][]): SniffResult {
     let bestCol = -1;
     let best = 0;
     for (let ci = 0; ci < width; ci++) {
-      const s = aliasScore(headers[ci] ?? '', ALIASES[key]);
+      let s = aliasScore(headers[ci] ?? '', ALIASES[key]);
+      // Cq 列一票否决离散度指标（Ct CV / Ct SD / Ct标准差……），否则会选中全 0 的统计列
+      if (key === 'cq' && s > 0 && DISPERSION_RE.test(headers[ci] ?? '')) s = 0;
       if (s > best) {
         best = s;
         bestCol = ci;
