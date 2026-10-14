@@ -8,8 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run",
-    "api": "tsx api/server.ts"
+    "test": "node --max-old-space-size=4096 ./node_modules/vitest/vitest.mjs run",
+    "api": "tsx api/server.ts",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "fast-xml-parser": "^5.11.2",

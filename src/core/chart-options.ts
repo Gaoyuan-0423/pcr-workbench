@@ -10,8 +10,17 @@ export interface ChartOptions {
   yMax: number | null;
   /** Y 轴刻度类型；对数用于 FC 跨数量级的场景 */
   yScale: 'linear' | 'log2' | 'log10';
-  /** 截断 Y 轴：上限以下正常、以上裁剪并画截断标记（上限留空时自动取次高值） */
-  axisBreak: boolean;
+  /** 断轴（GraphPad 双段式）：下段 [yMin, bottomMax]，上段 [topMin, topMax]，中间画截断线 */
+  yBreak: {
+    /** 下段上限 */
+    bottomMax: number;
+    /** 上段下限 */
+    topMin: number;
+    /** 上段上限 */
+    topMax: number;
+    /** 下段占轴高度百分比（默认 70） */
+    bottomPct: number;
+  } | null;
   /** 误差棒类型 */
   errorBar: 'sd' | 'sem' | 'none';
   /** 显著性标注：星号 / p 值 / 两者 / 不显示 */
@@ -25,6 +34,14 @@ export interface ChartOptions {
   height: number;
   /** 柱子显示名覆盖：原始样本名 → 图上名称 */
   labelOverrides: Record<string, string>;
+  /** 基因段显示名覆盖（多基因模式）：原始基因名 → 图上名称 */
+  geneLabelOverrides: Record<string, string>;
+  /** 图表字体 */
+  fontFamily: 'sans-serif' | 'Times New Roman' | 'Arial';
+  /** 基准字号（px），其余文字按比例缩放 */
+  fontSize: number;
+  /** 组内总宽度比例（0.1–1）：每组柱簇占标准宽度的比例，越小柱越细越紧 */
+  groupWidth: number;
 }
 
 export const DEFAULT_CHART_OPTIONS: ChartOptions = {
@@ -35,14 +52,18 @@ export const DEFAULT_CHART_OPTIONS: ChartOptions = {
   yMin: 0,
   yMax: null,
   yScale: 'linear',
-  axisBreak: false,
+  yBreak: null,
   errorBar: 'sd',
   showP: 'stars',
-  controlColor: '#9fb3ba',
-  groupColor: '#0e7c66',
+  controlColor: '#c9c9c9',
+  groupColor: '#1a1a1a',
   width: 860,
   height: 460,
   labelOverrides: {},
+  geneLabelOverrides: {},
+  fontFamily: 'sans-serif',
+  fontSize: 12,
+  groupWidth: 0.8,
 };
 
 /** 单值校正的展示文本：星号 / p 值 / 两者 / 无。 */

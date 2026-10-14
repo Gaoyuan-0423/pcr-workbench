@@ -299,11 +299,43 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 18 }}>
               <input
                 type="checkbox"
-                checked={chartOpts.axisBreak}
-                onChange={(e) => setChartOpts({ ...chartOpts, axisBreak: e.target.checked })}
+                checked={!!chartOpts.yBreak}
+                onChange={(e) =>
+                  setChartOpts({
+                    ...chartOpts,
+                    yBreak: e.target.checked
+                      ? {
+                          bottomMax: chartOpts.yBreak?.bottomMax ?? 30,
+                          topMin: chartOpts.yBreak?.topMin ?? chartOpts.yBreak?.bottomMax ?? 60,
+                          topMax: chartOpts.yBreak?.topMax ?? (chartOpts.yBreak?.bottomMax ?? 60) * 1.5,
+                          bottomPct: 70,
+                        }
+                      : null,
+                  })
+                }
               />
               Y 轴截断
             </label>
+            {chartOpts.yBreak && (
+              <>
+                <label>
+                  下段上限
+                  <input type="number" step="any" value={chartOpts.yBreak.bottomMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomMax: Number(e.target.value) } })} />
+                </label>
+                <label>
+                  上段下限
+                  <input type="number" step="any" value={chartOpts.yBreak.topMin} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMin: Number(e.target.value) } })} />
+                </label>
+                <label>
+                  上段上限
+                  <input type="number" step="any" value={chartOpts.yBreak.topMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMax: Number(e.target.value) } })} />
+                </label>
+                <label>
+                  下段占比 %
+                  <input type="number" min={10} max={90} value={chartOpts.yBreak.bottomPct} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomPct: Number(e.target.value) } })} />
+                </label>
+              </>
+            )}
             <label>
               误差棒
               <select value={chartOpts.errorBar} onChange={(e) => setChartOpts({ ...chartOpts, errorBar: e.target.value as 'sd' | 'sem' | 'none' })}>
