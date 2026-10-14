@@ -238,3 +238,16 @@ td.well.ntc .wellname { color: #8a9aa3; }
 .std-row.std-good { background: #f2faf6; }
 .std-row.std-warn { background: var(--warning-light); border-color: #f0d48a; }
 .std-row button { margin-left: auto; }
+
+/* 使用说明与示例数据 */
+.help-box {
+  background: var(--primary-light); border: 1px solid #bfe0d8; border-radius: var(--radius);
+  padding: 10px 16px; margin-bottom: 14px; font-size: 0.9rem;
+}
+.help-box summary { cursor: pointer; font-weight: 600; color: var(--primary-dark); user-select: none; }
+.help-box .help-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.help-box .help-body ul { margin: 4px 0 0 18px; }
+.help-box .help-body li { margin: 2px 0; }
+.demo-row { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.ai-answer { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; font-size: 0.92rem; }
+.ai-answer h3, .ai-answer h4 { margin: 10px 0 4px; color: var(--primary-dark); }

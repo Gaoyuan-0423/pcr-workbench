@@ -180,3 +180,19 @@ test('熔解摘要表附加：LightCycler No. Tm 格式按孔位连接', async (
   // F1（规范化孔位）Treat-3 双峰被点名
   await expect(page.locator('.qc-flag-row', { hasText: 'Treat-3' })).toContainText('2 个熔解峰');
 });
+
+test('示例数据一键体验 + 分步使用说明', async ({ page }) => {
+  await page.goto('/');
+  // 帮助面板
+  await page.getByText('❓ 这一步怎么做？').click();
+  await expect(page.getByText('怎么拿到分析用的文件？')).toBeVisible();
+  // 示例数据一键分析
+  await page.getByRole('button', { name: '标准曲线示例' }).click();
+  await page.getByText('一键智能分析报告').waitFor({ timeout: 15_000 });
+  await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
+  // AI 解读卡片（未配置状态）
+  await expect(page.getByText('还没有配置 AI')).toBeVisible();
+  await page.getByRole('button', { name: '配置我的 API' }).click();
+  await expect(page.getByText('🤖 AI 解读设置')).toBeVisible();
+  await page.getByRole('button', { name: '取消' }).click();
+});

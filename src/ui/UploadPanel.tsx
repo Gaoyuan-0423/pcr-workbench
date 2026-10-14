@@ -12,6 +12,7 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [demoBusy, setDemoBusy] = useState('');
   const [pending, setPending] = useState<WorkbookFile | null>(null);
   const [autoMode, setAutoMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +108,39 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
         >
           🪄 一键智能分析：自动识别列 / 对照组 / 内参，直接出结果与质量报告
         </button>
+      </div>
+      <div className="demo-row">
+        <span style={{ color: 'var(--muted-text)', fontSize: '0.85rem' }}>没有文件？试试示例数据（一键分析）：</span>
+        {(
+          [
+            ['cfx-style.csv', 'CFX 示例'],
+            ['quantstudio-style.txt', 'QuantStudio 示例'],
+            ['standard-curve-style.csv', '标准曲线示例'],
+          ] as const
+        ).map(([file, label]) => (
+          <button
+            key={file}
+            className="small"
+            disabled={busy || demoBusy !== ''}
+            onClick={() => {
+              setDemoBusy(file);
+              void (async () => {
+                try {
+                  const res = await fetch(`./demo/${file}`);
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  const buf = await res.arrayBuffer();
+                  await onAutoFile(new File([buf], file));
+                } catch (e) {
+                  setError(`示例数据加载失败：${e instanceof Error ? e.message : String(e)}`);
+                } finally {
+                  setDemoBusy('');
+                }
+              })();
+            }}
+          >
+            {demoBusy === file ? '加载中…' : label}
+          </button>
+        ))}
       </div>
       <input
         ref={inputRef}

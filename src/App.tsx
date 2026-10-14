@@ -14,6 +14,10 @@ import UploadPanel from './ui/UploadPanel';
 import MappingPanel from './ui/MappingPanel';
 import ConfigPanel from './ui/ConfigPanel';
 import ResultsPanel from './ui/ResultsPanel';
+import { StepHelp } from './ui/StepHelp';
+import { AiInterpretCard } from './ui/AiInterpretCard';
+import AiSettingsDialog from './ui/AiSettingsDialog';
+import { loadAiConfig, type AiConfig } from './core/ai';
 
 const STORAGE_KEY = 'pcr-workbench:project:v1';
 
@@ -45,10 +49,16 @@ export default function App() {
   const [autoReport, setAutoReport] = useState<QualityReport | null>(null);
   const [autoMelt, setAutoMelt] = useState<MeltGeneSummary[]>([]);
   const [meltTable, setMeltTable] = useState<MeltTableState | null>(null);
+  const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
+  const [showAiSettings, setShowAiSettings] = useState(false);
   const [guessBasis, setGuessBasis] = useState('');
   const [merged, setMerged] = useState<{ rows: AnalysisRow[]; perFile: PerFileInfo[] } | null>(null);
 
   // 恢复上次项目
+  useEffect(() => {
+    setAiConfig(loadAiConfig());
+  }, []);
+
   useEffect(() => {
     void get<ProjectState>(STORAGE_KEY).then((s) => {
       if (!s || !Array.isArray(s.matrix) || s.matrix.length === 0) return;
@@ -233,7 +243,21 @@ export default function App() {
         <span className="sub">qPCR 下机结果 → ΔΔCt → 图表导出</span>
         <span className="spacer" />
         <span className="privacy-note">🔒 数据仅在浏览器本地处理，不上传服务器</span>
+        <button className="small" style={{ marginLeft: 8 }} onClick={() => setShowAiSettings(true)}>
+          🤖 AI 设置
+        </button>
       </header>
+      {showAiSettings && (
+        <AiSettingsDialog
+          config={aiConfig}
+          onClose={() => setShowAiSettings(false)}
+          onSave={(c) => {
+            setAiConfig(c);
+            setShowAiSettings(false);
+            setToast(c ? 'AI 配置已保存' : '已清除 AI 配置');
+          }}
+        />
+      )}
 
       <nav className="steps" aria-label="分析步骤">
         {STEPS.map((label, i) => {
@@ -264,33 +288,83 @@ export default function App() {
         </div>
       )}
 
-      {step === 1 && <UploadPanel onLoaded={handleLoaded} onAutoFile={handleAutoFile} onMergeLoaded={handleMergeLoaded} />}
+      {step === 1 && (
+        <>
+          <UploadPanel onLoaded={handleLoaded} onAutoFile={handleAutoFile} onMergeLoaded={handleMergeLoaded} />
+          <StepHelp step={1} />
+        </>
+      )}
       {step === 2 &&
         (merged ? (
-          <MergeSummaryPanel perFile={merged.perFile} />
+          <>
+            <MergeSummaryPanel perFile={merged.perFile} />
+            <StepHelp step={2} />
+          </>
         ) : (
-          <MappingPanel
-            matrix={matrix}
-            headerRow={headerRow}
-            mapping={mapping}
-            onHeaderRow={setHeaderRow}
-            onMapping={setMapping}
-          />
+          <>
+            <MappingPanel
+              matrix={matrix}
+              headerRow={headerRow}
+              mapping={mapping}
+              onHeaderRow={setHeaderRow}
+              onMapping={setMapping}
+            />
+            <StepHelp step={2} />
+          </>
         ))}
       {step === 3 && (
-        <ConfigPanel
-          rows={rows}
-          flags={flags}
-          config={config}
-          onConfig={setConfig}
-          excluded={excluded}
-          onExcluded={setExcluded}
-          meltTable={meltTable}
-          onMeltTableFile={handleMeltTableFile}
-        />
+        <>
+          <ConfigPanel
+            rows={rows}
+            flags={flags}
+            config={config}
+            onConfig={setConfig}
+            excluded={excluded}
+            onExcluded={setExcluded}
+            meltTable={meltTable}
+            onMeltTableFile={handleMeltTableFile}
+          />
+          <StepHelp step={3} />
+        </>
       )}
       {step === 4 && out && (
-        <ResultsPanel out={out} fileName={fileName} rows={rows} flags={flags} autoReport={autoReport} guessBasis={guessBasis} autoMelt={autoMelt} />
+        <>
+          <ResultsPanel out={out} fileName={fileName} rows={rows} flags={flags} autoReport={autoReport} guessBasis={guessBasis} autoMelt={autoMelt} />
+          <StepHelp step={4} />
+          <AiInterpretCard
+            aiConfig={aiConfig}
+            onOpenSettings={() => setShowAiSettings(true)}
+            payload={{
+              experiment: {
+                controlSamples: config.controlSamples,
+                refGenes: config.refGenes,
+                basis: guessBasis || undefined,
+              },
+              report: {
+                score: autoReport?.score ?? 100,
+                summary: autoReport?.summary ?? '',
+                issues: autoReport?.issues ?? [],
+                advice: autoReport?.advice ?? [],
+              },
+              ntc: out.ntcReport.map((e) => ({ target: e.target, verdict: e.verdict, message: e.message })),
+              melt: autoMelt,
+              results: out.results.map((r) => ({
+                target: r.target,
+                sample: r.sample,
+                group: r.group,
+                isControl: r.isControl,
+                n: r.n,
+                deltaCt: r.deltaCt,
+                foldChange: r.foldChange,
+                fcSd: r.fcSd,
+                pDunnett: r.pAdjusted,
+                pValue: r.pValue,
+                significance: r.significance,
+              })),
+              warnings: out.warnings,
+            }}
+          />
+        </>
       )}
 
       <div className="row-actions" style={{ justifyContent: 'space-between', marginTop: 8 }}>
