@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { get, set } from 'idb-keyval';
+import { del, get, set } from 'idb-keyval';
 import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow, isStandardRow, type AnalysisRow } from './core/analysis';
 import { analyzeFileAuto, inferExperiment, type QualityReport } from './core/auto';
 import type { MeltGeneSummary, MeltTableState } from './core/melt';
@@ -7,6 +7,7 @@ import { parseMeltSummaryTable } from './core/melt';
 import { readInputFile, sheetToRawMatrix } from './core/parse';
 import { mergeFileMatrices, type FileMatrixInput, type PerFileInfo } from './core/merge';
 import MergeSummaryPanel from './ui/MergeSummaryPanel';
+import ProjectsDialog from './ui/ProjectsDialog';
 import { computeQcFlags } from './core/qc';
 import { sniff } from './core/sniff';
 import { mappingComplete, DEFAULT_QC, emptyMapping, type AnalysisConfig, type ColumnMapping, type QcFlags } from './core/types';
@@ -18,6 +19,17 @@ import { StepHelp } from './ui/StepHelp';
 import { AiInterpretCard } from './ui/AiInterpretCard';
 import AiSettingsDialog from './ui/AiSettingsDialog';
 import { loadAiConfig, type AiConfig } from './core/ai';
+import {
+  deleteProject,
+  listProjects,
+  loadProjectState,
+  newProjectId,
+  renameProject,
+  saveProject,
+  type ProjectMeta,
+} from './core/projects';
+
+const idbKv = { get, set, del };
 
 const STORAGE_KEY = 'pcr-workbench:project:v1';
 
@@ -31,6 +43,9 @@ interface ProjectState {
   config: AnalysisConfig;
   /** 多文件合并模式：直接存规范行（matrix 为空） */
   merged?: { rows: AnalysisRow[]; perFile: PerFileInfo[] } | null;
+  /** 一键分析报告与熔解汇总（恢复时重显报告卡） */
+  autoReport?: QualityReport | null;
+  autoMelt?: MeltGeneSummary[];
 }
 
 const STEPS = ['导入数据', '确认映射', '孔板与配置', '分析结果'];
@@ -53,36 +68,84 @@ export default function App() {
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [guessBasis, setGuessBasis] = useState('');
   const [merged, setMerged] = useState<{ rows: AnalysisRow[]; perFile: PerFileInfo[] } | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState('');
+  const [showProjects, setShowProjects] = useState(false);
+  const [projectList, setProjectList] = useState<ProjectMeta[]>([]);
 
-  // 恢复上次项目
+  // 恢复 AI 配置；迁移旧版单键数据并载入最近课题
   useEffect(() => {
     setAiConfig(loadAiConfig());
+    void (async () => {
+      let list = await listProjects(idbKv);
+      const legacy = await get<ProjectState>(STORAGE_KEY);
+      if (legacy && ((legacy.matrix?.length ?? 0) > 0 || (legacy.merged?.rows?.length ?? 0) > 0)) {
+        const id = newProjectId();
+        const migration: ProjectMeta = {
+          id,
+          name: legacy.fileName || '未命名课题',
+          updatedAt: Date.now(),
+          fileName: legacy.fileName,
+          score: null,
+          rows: legacy.merged?.rows?.length ?? legacy.matrix?.length ?? 0,
+        };
+        await saveProject(idbKv, migration, legacy);
+        await del(STORAGE_KEY);
+        list = await listProjects(idbKv);
+      }
+      setProjectList(list);
+      if (list.length > 0) {
+        const recent = list[0];
+        const state = await loadProjectState<ProjectState>(idbKv, recent.id);
+        if (state) {
+          setProjectId(recent.id);
+          setProjectName(recent.name);
+          setFileName(state.fileName);
+          setSheetName(state.sheetName);
+          setMatrix(state.matrix);
+          setHeaderRow(state.headerRow);
+          setMapping(state.mapping);
+          setExcluded(state.excluded ?? {});
+          setConfig(state.config);
+          setMerged(state.merged ?? null);
+          setAutoReport(state.autoReport ?? null);
+          setAutoMelt(state.autoMelt ?? []);
+          setRestored(true);
+          setStep(4);
+        }
+      }
+    })();
   }, []);
 
-  useEffect(() => {
-    void get<ProjectState>(STORAGE_KEY).then((s) => {
-      if (!s || !Array.isArray(s.matrix) || s.matrix.length === 0) return;
-      setFileName(s.fileName);
-      setSheetName(s.sheetName);
-      setMatrix(s.matrix);
-      setHeaderRow(s.headerRow);
-      setMapping(s.mapping);
-      setExcluded(s.excluded ?? {});
-      setConfig(s.config);
-      setMerged(s.merged ?? null);
-      setRestored(true);
-      setStep(4);
-    });
-  }, []);
+  function refreshProjectList(): void {
+    void listProjects(idbKv).then(setProjectList);
+  }
 
-  // 自动保存（防抖）
+  // 自动保存到当前课题（防抖）
   useEffect(() => {
     if (matrix.length === 0 && !merged) return;
     const t = setTimeout(() => {
-      void set(STORAGE_KEY, { fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged } satisfies ProjectState);
+      void (async () => {
+        let id = projectId;
+        if (!id) {
+          id = newProjectId();
+          setProjectId(id);
+        }
+        const state: ProjectState = { fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, autoReport, autoMelt };
+        const meta: ProjectMeta = {
+          id,
+          name: projectName || fileName || '未命名课题',
+          updatedAt: Date.now(),
+          fileName,
+          score: autoReport?.score ?? null,
+          rows: merged?.rows.length ?? matrix.length ? (merged ? merged.rows.length : matrix.slice(headerRow + 1).length) : 0,
+        };
+        await saveProject(idbKv, meta, state);
+        setProjectList(await listProjects(idbKv));
+      })();
     }, 600);
     return () => clearTimeout(t);
-  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged]);
+  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, projectId, projectName, autoReport?.score]);
 
   useEffect(() => {
     if (!toast) return;
@@ -111,6 +174,8 @@ export default function App() {
     setAutoReport(null);
     setAutoMelt([]);
     setMeltTable(null);
+    setProjectId(null);
+    setProjectName('');
     setGuessBasis(guess.basis);
     setRestored(false);
     setStep(2);
@@ -146,6 +211,8 @@ export default function App() {
     setConfig(result.config);
     setAutoReport(result.report);
     setAutoMelt(result.melt ?? []);
+    setProjectId(null);
+    setProjectName('');
     setGuessBasis(result.guess.basis);
     setRestored(false);
     setStep(4);
@@ -167,6 +234,8 @@ export default function App() {
       refGenes: guessRefGenes(genes),
       qc: DEFAULT_QC,
     });
+    setProjectId(null);
+    setProjectName('');
     setRestored(false);
     setStep(2);
     setToast(`已解析 ${name}（${sheet}）：${rows.length} 行数据，自动映射完成，请确认`);
@@ -242,11 +311,67 @@ export default function App() {
         <h1>PCR Workbench · PCR 工作台</h1>
         <span className="sub">qPCR 下机结果 → ΔΔCt → 图表导出</span>
         <span className="spacer" />
+        {projectName && (
+          <span className="privacy-note" title={projectName}>
+            📁 {projectName.length > 18 ? projectName.slice(0, 18) + '…' : projectName}
+          </span>
+        )}
+        <button className="small" onClick={() => { refreshProjectList(); setShowProjects(true); }}>
+          📂 我的课题
+        </button>
         <span className="privacy-note">🔒 数据仅在浏览器本地处理，不上传服务器</span>
         <button className="small" style={{ marginLeft: 8 }} onClick={() => setShowAiSettings(true)}>
           🤖 AI 设置
         </button>
       </header>
+      {showProjects && (
+        <ProjectsDialog
+          currentId={projectId}
+          projects={projectList}
+          onClose={() => setShowProjects(false)}
+          onNew={() => {
+            setShowProjects(false);
+            reset();
+          }}
+          onOpen={(id) => {
+            void (async () => {
+              const meta = projectList.find((m) => m.id === id);
+              const state = await loadProjectState<ProjectState>(idbKv, id);
+              if (!state) return;
+              setShowProjects(false);
+              setProjectId(id);
+              setProjectName(meta?.name ?? state.fileName);
+              setFileName(state.fileName);
+              setSheetName(state.sheetName);
+              setMatrix(state.matrix);
+              setHeaderRow(state.headerRow);
+              setMapping(state.mapping);
+              setExcluded(state.excluded ?? {});
+              setConfig(state.config);
+              setMerged(state.merged ?? null);
+              setAutoReport(state.autoReport ?? null);
+              setAutoMelt(state.autoMelt ?? []);
+              setMeltTable(null);
+              setRestored(true);
+              setStep(4);
+              setToast(`已打开课题「${meta?.name ?? state.fileName}」`);
+            })();
+          }}
+          onRename={(id, name) => {
+            void renameProject(idbKv, id, name);
+            if (id === projectId) setProjectName(name);
+            refreshProjectList();
+          }}
+          onDelete={(id) => {
+            void deleteProject(idbKv, id).then(refreshProjectList);
+            if (id === projectId) {
+              setProjectId(null);
+              setProjectName('');
+              reset();
+            }
+          }}
+        />
+      )}
       {showAiSettings && (
         <AiSettingsDialog
           config={aiConfig}

@@ -196,3 +196,26 @@ test('示例数据一键体验 + 分步使用说明', async ({ page }) => {
   await expect(page.getByText('🤖 AI 解读设置')).toBeVisible();
   await page.getByRole('button', { name: '取消' }).click();
 });
+
+test('课题管理：自动保存、我的课题列表、打开与删除', async ({ page }) => {
+  await page.goto('/');
+  // 用示例数据产生一个课题
+  await page.getByRole('button', { name: '标准曲线示例' }).click();
+  await page.getByText('一键智能分析报告').waitFor({ timeout: 15_000 });
+  // 头部出现课题名，打开我的课题
+  await page.getByRole('button', { name: /我的课题/ }).click();
+  await page.getByText('1 个已保存').waitFor({ timeout: 10_000 });
+  await expect(page.getByText('standard-curve-style.csv', { exact: true })).toBeVisible();
+  // 新建课题（清空当前）
+  await page.getByRole('button', { name: '＋ 新建课题' }).click();
+  await expect(page.getByText('拖入文件，或点击选择')).toBeVisible();
+  // 再开我的课题，打开刚才的课题 → 恢复到结果页
+  await page.getByRole('button', { name: /我的课题/ }).click();
+  await page.getByRole('button', { name: '打开' }).first().click();
+  await page.getByText('一键智能分析报告').waitFor({ timeout: 15_000 });
+  // 删除流程（两段确认）
+  await page.getByRole('button', { name: /我的课题/ }).click();
+  await page.getByRole('button', { name: '删除' }).first().click();
+  await page.getByRole('button', { name: '确认删除' }).click();
+  await expect(page.getByText('还没有保存的课题')).toBeVisible();
+});
