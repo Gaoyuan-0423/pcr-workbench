@@ -267,8 +267,10 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
           <span className="hint">均值 ± {chartOpts.errorBar === 'sem' ? 'SEM' : chartOpts.errorBar === 'none' ? '无' : 'SD'}</span>
         </h2>
 
-        <details className="chart-settings">
-          <summary>⚙️ 图表设置（坐标轴 / 配色 / 显著性 / 尺寸 / 多基因）</summary>
+        <div className="chart-settings">
+          <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 8, color: 'var(--primary-dark)' }}>
+            ⚙️ 图表设置
+          </div>
           <div className="chart-settings-grid">
             <label>
               标题
@@ -291,8 +293,16 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
               <input type="number" step="any" placeholder="自动" value={chartOpts.yMin ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMin: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
             </label>
             <label>
-              Y 轴上限
+              Y 轴上限（截断位置）
               <input type="number" step="any" placeholder="自动" value={chartOpts.yMax ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMax: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
+            </label>
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 18 }}>
+              <input
+                type="checkbox"
+                checked={chartOpts.axisBreak}
+                onChange={(e) => setChartOpts({ ...chartOpts, axisBreak: e.target.checked })}
+              />
+              Y 轴截断
             </label>
             <label>
               误差棒
@@ -367,20 +377,25 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
                 <input
                   type="text"
                   className="label-input"
-                  placeholder={s}
-                  value={chartOpts.labelOverrides[s] ?? ''}
+                  value={chartOpts.labelOverrides[s] ?? s}
                   onChange={(e) => {
                     const next = { ...chartOpts.labelOverrides };
-                    if (e.target.value.trim() === '') delete next[s];
-                    else next[s] = e.target.value.trim();
+                    next[s] = e.target.value; // 允许临时清空，失焦时回落默认名
                     setChartOpts({ ...chartOpts, labelOverrides: next });
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value.trim() === '') {
+                      const next = { ...chartOpts.labelOverrides };
+                      delete next[s];
+                      setChartOpts({ ...chartOpts, labelOverrides: next });
+                    }
                   }}
                   aria-label={'修改 ' + s + ' 的显示名'}
                 />
               </span>
             ))}
           </div>
-        </details>
+        </div>
 
         <div
           className="chart-preview"

@@ -33,7 +33,7 @@ export function buildBarsForGene(
     const stars = significanceStars(pAdj ?? r.pValue);
     return {
       sample: r.sample,
-      label: opts.labelOverrides[r.sample] ?? r.sample,
+      label: opts.labelOverrides[r.sample]?.trim() || r.sample,
       target: r.target,
       value: mean,
       err,

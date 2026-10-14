@@ -10,6 +10,8 @@ export interface ChartOptions {
   yMax: number | null;
   /** Y 轴刻度类型；对数用于 FC 跨数量级的场景 */
   yScale: 'linear' | 'log2' | 'log10';
+  /** 截断 Y 轴：上限以下正常、以上裁剪并画截断标记（上限留空时自动取次高值） */
+  axisBreak: boolean;
   /** 误差棒类型 */
   errorBar: 'sd' | 'sem' | 'none';
   /** 显著性标注：星号 / p 值 / 两者 / 不显示 */
@@ -33,6 +35,7 @@ export const DEFAULT_CHART_OPTIONS: ChartOptions = {
   yMin: 0,
   yMax: null,
   yScale: 'linear',
+  axisBreak: false,
   errorBar: 'sd',
   showP: 'stars',
   controlColor: '#9fb3ba',
