@@ -292,3 +292,19 @@ test('图表定制进阶：基因勾选、名称修改、log2 刻度、统计学
   await expect(page.locator('.method-caption')).toContainText('统计学方法');
   await expect(page.locator('.method-caption')).toContainText('Dunnett');
 });
+
+test('多基因图例与基因重命名', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('cfx-style.csv'));
+  await page.getByText('已解析 cfx-style.csv').waitFor({ timeout: 15_000 });
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  await page.locator('.check-list label', { hasText: 'Control-1' }).locator('input').check();
+  await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
+  await page.getByText('⚙️ 图表设置').waitFor({ timeout: 10_000 });
+  await page.getByText('合并多基因作图').locator('input').check();
+  await page.waitForTimeout(300);
+  // 基因重命名输入框出现并生效
+  const geneInput = page.getByRole('textbox', { name: '修改 LDHA 的显示名' });
+  await geneInput.fill('乳酸脱氢酶');
+  await expect(page.locator('.chart-preview svg text', { hasText: '乳酸脱氢酶' }).first()).toBeVisible();
+});

@@ -40,6 +40,15 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
 
   const activeGene = genes.includes(gene) ? gene : genes[0] ?? '';
 
+  // 样本 → 组别 映射（名称修改处展示）
+  const sampleGroup = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of out.results) {
+      if (r.group && !m.has(r.sample)) m.set(r.sample, r.group);
+    }
+    return m;
+  }, [out.results]);
+
   // 每样本颜色：对照用 controlColor，处理组统一 groupColor
   const colorFor = (r: SampleTargetResult): string =>
     r.isControl ? chartOpts.controlColor : chartOpts.groupColor;
@@ -64,7 +73,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
     return chartGenes
       .filter(Boolean)
       .map((g) => ({
-        gene: g,
+        gene: chartOpts.geneLabelOverrides[g] || g,
         bars: buildBarsForGene(
           out.results.filter((r) => r.target === g),
           chartOpts,
@@ -403,7 +412,9 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
             </div>
           )}
           <div className="gene-multiselect" style={{ marginTop: 10 }}>
-            <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>名称修改（柱子下方显示名）：</span>
+            <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>
+              {multiGene ? '样本名称修改（柱子下方显示名）：' : '名称修改（柱子下方显示名）：'}
+            </span>
             {chartSamples.map((s) => (
               <span key={s} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 10 }}>
                 <input
@@ -424,9 +435,39 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
                   }}
                   aria-label={'修改 ' + s + ' 的显示名'}
                 />
+                {sampleGroup.get(s) && (
+                  <span style={{ fontSize: '0.76rem', color: 'var(--muted-text)' }}>{sampleGroup.get(s)}</span>
+                )}
               </span>
             ))}
           </div>
+          {multiGene && (
+            <div className="gene-multiselect" style={{ marginTop: 10 }}>
+              <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>基因名称修改（段下方显示名）：</span>
+              {genes.map((g) => (
+                <span key={g} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 10 }}>
+                  <input
+                    type="text"
+                    className="label-input"
+                    value={chartOpts.geneLabelOverrides[g] ?? g}
+                    onChange={(e) => {
+                      const next = { ...chartOpts.geneLabelOverrides };
+                      next[g] = e.target.value; // 允许临时清空，失焦时回落默认名
+                      setChartOpts({ ...chartOpts, geneLabelOverrides: next });
+                    }}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() === '') {
+                        const next = { ...chartOpts.geneLabelOverrides };
+                        delete next[g];
+                        setChartOpts({ ...chartOpts, geneLabelOverrides: next });
+                      }
+                    }}
+                    aria-label={'修改 ' + g + ' 的显示名'}
+                  />
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div

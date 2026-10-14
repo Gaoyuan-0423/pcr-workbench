@@ -127,8 +127,14 @@ export function multiGeneChartSvg(
   if (opts.subtitle) parts.push(`<text x="${M.left}" y="${fs(46)}" font-size="${fs(12)}" fill="#5f7480" font-family="${ff}">${esc(opts.subtitle)}</text>`);
 
   for (const t of tickLines) {
-    parts.push(`<line x1="${M.left}" x2="${W - M.right}" y1="${t.y}" y2="${t.y}" stroke="#e4ebee"/>`);
     parts.push(`<text x="${M.left - 8}" y="${t.y + 4}" font-size="${fs(11.5)}" fill="#5f7480" text-anchor="end" font-family="${ff}">${esc(t.label)}</text>`);
+  }
+  // 组别图例（右上角，按出现顺序去重）
+  const legendItems: { label: string; color: string }[] = [];
+  for (const seg of segments) {
+    for (const b of seg.bars) {
+      if (!legendItems.some((l) => l.label === b.label)) legendItems.push({ label: b.label, color: b.color });
+    }
   }
   // 断轴截断线（两条斜线）；无断轴但手动上限裁掉数据时在轴顶部同样标记
   if (hasBreak) {
@@ -208,6 +214,22 @@ export function multiGeneChartSvg(
     }
   }
   parts.push('</g>');
+
+  // 组别图例（右上角横排）
+  if (legendItems.length > 1) {
+    const ly = M.top + 6;
+    let lx = W - M.right;
+    const itemW = (label: string) => 16 + label.length * fs(6.5) + 14;
+    for (const item of [...legendItems].reverse()) {
+      const w = itemW(item.label);
+      lx -= w;
+      if (lx < M.left) break;
+      parts.push(
+        `<rect x="${lx}" y="${ly}" width="12" height="12" fill="${item.color}" rx="2"/>`,
+        `<text x="${lx + 16}" y="${ly + 10}" font-size="${fs(11)}" fill="#1d2b32" font-family="${ff}">${esc(item.label)}</text>`,
+      );
+    }
+  }
 
   if (opts.xLabel) {
     parts.push(`<text x="${M.left + plotW / 2}" y="${H - 14}" font-size="${fs(12.5)}" text-anchor="middle" fill="#1d2b32" font-family="${ff}">${esc(opts.xLabel)}</text>`);
