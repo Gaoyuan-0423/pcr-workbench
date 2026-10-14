@@ -219,3 +219,21 @@ test('课题管理：自动保存、我的课题列表、打开与删除', async
   await page.getByRole('button', { name: '确认删除' }).click();
   await expect(page.getByText('还没有保存的课题')).toBeVisible();
 });
+
+test('换新表后刷新：恢复的应是新表而不是旧课题', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '标准曲线示例' }).click();
+  await page.getByText('一键智能分析报告').waitFor({ timeout: 15_000 });
+  await page.waitForTimeout(800); // 等首次落盘
+  // 换一张不同的表（回到第 1 步）
+  await page.getByRole('button', { name: '← 上一步' }).click();
+  await page.getByRole('button', { name: '← 上一步' }).click();
+  await page.getByRole('button', { name: '← 上一步' }).click();
+  await page.setInputFiles('input[type=file]', fixture('cfx-style.csv'));
+  await page.getByText('已解析 cfx-style.csv').waitFor({ timeout: 15_000 });
+  // 快速刷新（防抖可能未落盘，pagehide 应立即保存）
+  await page.reload();
+  await page.getByText('已恢复上次的项目「cfx-style.csv」').waitFor({ timeout: 15_000 });
+  // 结果应是新表的数据（存在 ΔΔCt 结果表即证明不是旧示例）
+  await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
+});

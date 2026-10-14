@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { del, get, set } from 'idb-keyval';
 import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow, isStandardRow, type AnalysisRow } from './core/analysis';
 import { analyzeFileAuto, inferExperiment, type QualityReport } from './core/auto';
@@ -32,6 +32,7 @@ import {
 const idbKv = { get, set, del };
 
 const STORAGE_KEY = 'pcr-workbench:project:v1';
+const LAST_KEY = 'pcr-workbench:last:v1';
 
 interface ProjectState {
   fileName: string;
@@ -72,8 +73,11 @@ export default function App() {
   const [projectName, setProjectName] = useState('');
   const [showProjects, setShowProjects] = useState(false);
   const [projectList, setProjectList] = useState<ProjectMeta[]>([]);
+  /** 用户已主动加载过数据（新表/示例）——挂载恢复必须让位于用户操作 */
+  const userLoadedRef = useRef(false);
 
-  // 恢复 AI 配置；迁移旧版单键数据并载入最近课题
+  // 恢复优先级：localStorage 同步镜像（最新，见下方镜像写入）> 最近课题；
+  // 异步恢复期间用户可能已拖入新文件——已加载则放弃恢复，避免旧数据覆盖新上传
   useEffect(() => {
     setAiConfig(loadAiConfig());
     void (async () => {
@@ -93,27 +97,54 @@ export default function App() {
         await del(STORAGE_KEY);
         list = await listProjects(idbKv);
       }
-      setProjectList(list);
-      if (list.length > 0) {
-        const recent = list[0];
-        const state = await loadProjectState<ProjectState>(idbKv, recent.id);
-        if (state) {
-          setProjectId(recent.id);
-          setProjectName(recent.name);
-          setFileName(state.fileName);
-          setSheetName(state.sheetName);
-          setMatrix(state.matrix);
-          setHeaderRow(state.headerRow);
-          setMapping(state.mapping);
-          setExcluded(state.excluded ?? {});
-          setConfig(state.config);
-          setMerged(state.merged ?? null);
-          setAutoReport(state.autoReport ?? null);
-          setAutoMelt(state.autoMelt ?? []);
-          setRestored(true);
-          setStep(4);
+      if (userLoadedRef.current) return; // 用户已换新表，放弃恢复
+
+      // 1) 同步镜像优先（刷新必然拿到最新工作状态）
+      let restoredState: ProjectState | null = null;
+      let restoredMeta: ProjectMeta | null = null;
+      try {
+        const raw = localStorage.getItem(LAST_KEY);
+        if (raw) {
+          const mirror = JSON.parse(raw) as ProjectState & { id: string | null };
+          // 镜像挂在一个已被删除的课题上 → 不复活
+          if (!mirror.id || list.some((m) => m.id === mirror.id)) {
+            restoredState = mirror;
+            restoredMeta = list.find((m) => m.id === mirror.id) ?? null;
+            if (mirror.id && !restoredMeta) {
+              restoredMeta = { id: mirror.id, name: mirror.fileName || '未命名课题', updatedAt: Date.now(), fileName: mirror.fileName, score: null, rows: mirror.merged?.rows?.length ?? mirror.matrix.length };
+            }
+          } else {
+            localStorage.removeItem(LAST_KEY);
+          }
         }
+      } catch {
+        /* 镜像损坏则忽略 */
       }
+
+      // 2) 回落：课题索引里的最近一条
+      if (!restoredState && list.length > 0) {
+        const recent = list[0];
+        restoredState = (await loadProjectState<ProjectState>(idbKv, recent.id)) ?? null;
+        restoredMeta = recent;
+      }
+
+      if (userLoadedRef.current) return; // 双重检查
+      if (!restoredState) return;
+      setProjectId(restoredMeta?.id ?? null);
+      setProjectName(restoredMeta?.name ?? '');
+      setFileName(restoredState.fileName);
+      setSheetName(restoredState.sheetName);
+      setMatrix(restoredState.matrix);
+      setHeaderRow(restoredState.headerRow);
+      setMapping(restoredState.mapping);
+      setExcluded(restoredState.excluded ?? {});
+      setConfig(restoredState.config);
+      setMerged(restoredState.merged ?? null);
+      setAutoReport(restoredState.autoReport ?? null);
+      setAutoMelt(restoredState.autoMelt ?? []);
+      setProjectList(list);
+      setRestored(true);
+      setStep(4);
     })();
   }, []);
 
@@ -121,31 +152,72 @@ export default function App() {
     void listProjects(idbKv).then(setProjectList);
   }
 
-  // 自动保存到当前课题（防抖）
+  // 自动保存到当前课题（防抖）；页面隐藏/关闭时立即落盘，避免快速刷新丢最新数据
+  const saveNow = useCallback(() => {
+    if (matrix.length === 0 && !merged) return;
+    void (async () => {
+      let id = projectId;
+      if (!id) {
+        id = newProjectId();
+        setProjectId(id);
+      }
+      const state: ProjectState = { fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, autoReport, autoMelt };
+      const meta: ProjectMeta = {
+        id,
+        name: projectName || fileName || '未命名课题',
+        updatedAt: Date.now(),
+        fileName,
+        score: autoReport?.score ?? null,
+        rows: merged?.rows.length ?? matrix.length ? (merged ? merged.rows.length : matrix.slice(headerRow + 1).length) : 0,
+      };
+      await saveProject(idbKv, meta, state);
+      setProjectList(await listProjects(idbKv));
+    })();
+  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, projectId, projectName, autoReport?.score]);
+
+  // 同步镜像：每次状态变化立即写 localStorage（同步 API，刷新必然拿到最新）。
+  // IDB 的防抖保存负责课题列表；镜像负责"当前工作状态"的可靠恢复。
   useEffect(() => {
     if (matrix.length === 0 && !merged) return;
-    const t = setTimeout(() => {
-      void (async () => {
-        let id = projectId;
-        if (!id) {
-          id = newProjectId();
-          setProjectId(id);
-        }
-        const state: ProjectState = { fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, autoReport, autoMelt };
-        const meta: ProjectMeta = {
-          id,
-          name: projectName || fileName || '未命名课题',
-          updatedAt: Date.now(),
+    try {
+      localStorage.setItem(
+        LAST_KEY,
+        JSON.stringify({
           fileName,
-          score: autoReport?.score ?? null,
-          rows: merged?.rows.length ?? matrix.length ? (merged ? merged.rows.length : matrix.slice(headerRow + 1).length) : 0,
-        };
-        await saveProject(idbKv, meta, state);
-        setProjectList(await listProjects(idbKv));
-      })();
-    }, 600);
+          sheetName,
+          matrix,
+          headerRow,
+          mapping,
+          excluded,
+          config,
+          merged,
+          autoReport,
+          autoMelt,
+          id: projectId,
+        } satisfies ProjectState & { id: string | null }),
+      );
+    } catch {
+      // 超出 localStorage 配额（超大表）时跳过——IDB 防抖保存仍兜底
+    }
+  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, projectId]);
+
+  useEffect(() => {
+    if (matrix.length === 0 && !merged) return;
+    const t = setTimeout(saveNow, 600);
     return () => clearTimeout(t);
-  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, projectId, projectName, autoReport?.score]);
+  }, [matrix, merged, saveNow]);
+
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') saveNow();
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+    };
+  }, [saveNow]);
 
   useEffect(() => {
     if (!toast) return;
@@ -154,6 +226,7 @@ export default function App() {
   }, [toast]);
 
   const handleMergeLoaded = useCallback((inputs: FileMatrixInput[]) => {
+    userLoadedRef.current = true;
     const m = mergeFileMatrices(inputs);
     const genes = [...new Set(m.rows.map((r) => r.target).filter(Boolean))];
     setFileName(inputs.map((i) => i.fileName).join(' + '));
@@ -201,6 +274,7 @@ export default function App() {
   }, []);
 
   const handleAutoFile = useCallback(async (file: File) => {
+    userLoadedRef.current = true;
     const result = await analyzeFileAuto(file);
     setFileName(result.fileName);
     setSheetName(result.sheetName);
@@ -220,6 +294,7 @@ export default function App() {
   }, []);
 
   const handleLoaded = useCallback((name: string, sheet: string, m: string[][]) => {
+    userLoadedRef.current = true;
     const s = sniff(m);
     setFileName(name);
     setSheetName(sheet);
@@ -306,6 +381,9 @@ export default function App() {
     setMeltTable(null);
     setGuessBasis('');
     setMerged(null);
+    setProjectId(null);
+    setProjectName('');
+    localStorage.removeItem(LAST_KEY); // 新建课题：清掉当前工作镜像，防止刷新后复活旧内容
     setRestored(false);
     setStep(1);
   }
