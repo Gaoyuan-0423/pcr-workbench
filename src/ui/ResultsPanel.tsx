@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import type { AnalysisOutput } from '../core/types';
+import { useMemo, useState } from 'react';
+import type { AnalysisOutput, SampleTargetResult } from '../core/types';
 import { formatP } from '../core/stats';
 import {
   downloadCsv,
@@ -8,8 +8,12 @@ import {
   downloadWorkbook,
   buildWorkbook,
   resultAoa,
+  downloadBlob,
 } from '../core/export';
-import ChartSvg, { type ChartBar } from './ChartSvg';
+import { DEFAULT_CHART_OPTIONS, type ChartOptions } from '../core/chart-options';
+import { buildBarsForGene } from '../core/chart-bars';
+import { multiGeneChartSvg } from '../core/chart-svg';
+import { buildPrismPzfx } from '../core/pzfx';
 
 interface Props {
   out: AnalysisOutput;
@@ -30,22 +34,42 @@ const SEVERITY_LABEL: Record<string, { zh: string; cls: string }> = {
 export default function ResultsPanel({ out, fileName, rows, flags, autoReport, guessBasis, autoMelt }: Props) {
   const genes = useMemo(() => [...new Set(out.results.map((r) => r.target))], [out.results]);
   const [gene, setGene] = useState(genes[0] ?? '');
-  const svgRef = useRef<SVGSVGElement>(null);
+  const [multiGene, setMultiGene] = useState(false);
+  const [chartOpts, setChartOpts] = useState<ChartOptions>(DEFAULT_CHART_OPTIONS);
 
   const activeGene = genes.includes(gene) ? gene : genes[0] ?? '';
+
+  // 每样本颜色：对照用 controlColor，处理组统一 groupColor
+  const colorFor = (r: SampleTargetResult): string =>
+    r.isControl ? chartOpts.controlColor : chartOpts.groupColor;
+
   const geneResults = out.results.filter((r) => r.target === activeGene);
 
-  const bars: ChartBar[] = geneResults.map((r) => ({
-    sample: r.sample,
-    fcMean: r.fcMean,
-    fcSd: r.fcSd,
-    isControl: r.isControl,
-    significance: r.significance,
-  }));
-
   function baseName(): string {
-    return (fileName.replace(/\.[^.]+$/, '') || 'pcr-workbench') + `-${activeGene || 'results'}`;
+    const genesTag = multiGene ? 'multi' : activeGene;
+    return (fileName.replace(/\.[^.]+$/, '') || 'pcr-workbench') + `-${genesTag || 'results'}`;
   }
+
+  // 图表段（单基因或多基因分段）
+  const segments = useMemo(() => {
+    const targetGenes = multiGene ? genes : [activeGene];
+    return targetGenes
+      .filter(Boolean)
+      .map((g) => ({
+        gene: g,
+        bars: buildBarsForGene(
+          out.results.filter((r) => r.target === g),
+          chartOpts,
+          colorFor,
+        ),
+      }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [out.results, genes, activeGene, multiGene, chartOpts]);
+
+  const svgString = useMemo(() => {
+    return multiGeneChartSvg(segments, chartOpts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments, chartOpts]);
 
   function exportExcel() {
     const wb = buildWorkbook(out, rows, flags, {
@@ -59,9 +83,16 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
   }
 
   function exportPng() {
-    const svg = svgRef.current;
-    if (!svg) return;
-    void downloadSvgAsPng(svg, baseName() + '.png').catch((e) => alert(String(e)));
+    void downloadSvgAsPng(svgString, baseName() + '.png', { width: chartOpts.width, height: chartOpts.height }).catch((e) => alert(String(e)));
+  }
+
+  function exportPrism() {
+    const xml = buildPrismPzfx(out.results, {
+      projectName: fileName,
+      refGenes: out.refGenesUsed,
+      controlSamples: out.controlSamples,
+    });
+    downloadBlob(xml, baseName() + '-prism.pzfx', 'application/xml');
   }
 
   return (
@@ -211,17 +242,90 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
 
       <div className="card chart-box">
         <h2>
-          柱状图（{activeGene || '—'}）
-          <span className="hint">均值 ± SD；星号为 vs 对照的校正显著性（多组时 Dunnett）</span>
+          柱状图{chartOpts.title ? `——${chartOpts.title}` : multiGene ? '（多基因分段）' : `（${activeGene}）`}
+          <span className="hint">均值 ± {chartOpts.errorBar === 'sem' ? 'SEM' : chartOpts.errorBar === 'none' ? '无' : 'SD'}</span>
         </h2>
-        <ChartSvg gene={activeGene} bars={bars} svgRef={svgRef} />
+
+        <details className="chart-settings">
+          <summary>⚙️ 图表设置（坐标轴 / 配色 / 显著性 / 尺寸 / 多基因）</summary>
+          <div className="chart-settings-grid">
+            <label>
+              标题
+              <input type="text" value={chartOpts.title} placeholder="留空 = 基因名" onChange={(e) => setChartOpts({ ...chartOpts, title: e.target.value })} />
+            </label>
+            <label>
+              副标题
+              <input type="text" value={chartOpts.subtitle} onChange={(e) => setChartOpts({ ...chartOpts, subtitle: e.target.value })} />
+            </label>
+            <label>
+              Y 轴标题
+              <input type="text" value={chartOpts.yLabel} onChange={(e) => setChartOpts({ ...chartOpts, yLabel: e.target.value })} />
+            </label>
+            <label>
+              X 轴标题
+              <input type="text" value={chartOpts.xLabel} placeholder="留空 = 不显示" onChange={(e) => setChartOpts({ ...chartOpts, xLabel: e.target.value })} />
+            </label>
+            <label>
+              Y 轴下限
+              <input type="number" step="any" placeholder="自动" value={chartOpts.yMin ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMin: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
+            </label>
+            <label>
+              Y 轴上限
+              <input type="number" step="any" placeholder="自动" value={chartOpts.yMax ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMax: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
+            </label>
+            <label>
+              误差棒
+              <select value={chartOpts.errorBar} onChange={(e) => setChartOpts({ ...chartOpts, errorBar: e.target.value as 'sd' | 'sem' | 'none' })}>
+                <option value="sd">SD</option>
+                <option value="sem">SEM</option>
+                <option value="none">不显示</option>
+              </select>
+            </label>
+            <label>
+              显著性标注
+              <select value={chartOpts.showP} onChange={(e) => setChartOpts({ ...chartOpts, showP: e.target.value as 'stars' | 'p' | 'both' | 'none' })}>
+                <option value="stars">星号（*/**/***）</option>
+                <option value="p">p 值</option>
+                <option value="both">星号 + p 值</option>
+                <option value="none">不显示</option>
+              </select>
+            </label>
+            <label>
+              对照柱颜色
+              <input type="color" value={chartOpts.controlColor} onChange={(e) => setChartOpts({ ...chartOpts, controlColor: e.target.value })} />
+            </label>
+            <label>
+              处理柱颜色
+              <input type="color" value={chartOpts.groupColor} onChange={(e) => setChartOpts({ ...chartOpts, groupColor: e.target.value })} />
+            </label>
+            <label>
+              图宽（px）
+              <input type="number" min={400} max={2400} value={chartOpts.width} onChange={(e) => setChartOpts({ ...chartOpts, width: Math.max(400, Number(e.target.value) || 860) })} />
+            </label>
+            <label>
+              图高（px）
+              <input type="number" min={260} max={1600} value={chartOpts.height} onChange={(e) => setChartOpts({ ...chartOpts, height: Math.max(260, Number(e.target.value) || 460) })} />
+            </label>
+          </div>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 10, fontSize: '0.88rem' }}>
+            <input type="checkbox" checked={multiGene} onChange={(e) => setMultiGene(e.target.checked)} />
+            合并多基因作图（分段柱状图：每基因一段，段内为各样本 vs 对照）
+          </label>
+        </details>
+
+        <div
+          className="chart-preview"
+          // SVG 字符串由本仓库生成器产出（内容已转义）
+          dangerouslySetInnerHTML={{ __html: svgString }}
+        />
+
         <div className="row-actions">
-          <button onClick={() => svgRef.current && downloadSvg(svgRef.current, baseName() + '.svg')}>
-            导出 SVG（矢量）
-          </button>
+          <button onClick={() => downloadSvg(svgString, baseName() + '.svg')}>导出 SVG（矢量）</button>
           <button className="primary" onClick={exportPng}>
             导出 PNG
           </button>
+          <span style={{ flex: 1 }} />
+          <button onClick={exportPrism}>导出 Prism 工程（.pzfx）</button>
         </div>
       </div>
     </div>

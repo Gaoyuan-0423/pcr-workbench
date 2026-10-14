@@ -136,22 +136,27 @@ export function downloadCsv(aoa: (string | number)[][], filename: string): void 
   downloadBlob(toCsv(aoa), filename, 'text/csv;charset=utf-8');
 }
 
-export function downloadSvg(svg: SVGSVGElement, filename: string): void {
-  const xml = new XMLSerializer().serializeToString(svg);
+export function downloadSvg(svg: SVGSVGElement | string, filename: string): void {
+  const xml = typeof svg === 'string' ? svg : new XMLSerializer().serializeToString(svg);
   downloadBlob('\uFEFF' + xml, filename, 'image/svg+xml;charset=utf-8');
 }
 
-export function downloadSvgAsPng(svg: SVGSVGElement, filename: string, scale = 2): Promise<void> {
+/** 将 SVG 字符串栅格化为 PNG；width/height 为 SVG 逻辑尺寸，scale 为导出倍率。 */
+export function downloadSvgAsPng(
+  svg: SVGSVGElement | string,
+  filename: string,
+  opts: { width: number; height: number; scale?: number },
+): Promise<void> {
+  const scale = opts.scale ?? 2;
   return new Promise((resolve, reject) => {
-    const xml = new XMLSerializer().serializeToString(svg);
+    const xml = typeof svg === 'string' ? svg : new XMLSerializer().serializeToString(svg);
     const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
-    const rect = svg.getBoundingClientRect();
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = rect.width * scale;
-      canvas.height = rect.height * scale;
+      canvas.width = opts.width * scale;
+      canvas.height = opts.height * scale;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         URL.revokeObjectURL(url);
@@ -159,7 +164,7 @@ export function downloadSvgAsPng(svg: SVGSVGElement, filename: string, scale = 2
         return;
       }
       ctx.scale(scale, scale);
-      ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      ctx.drawImage(img, 0, 0, opts.width, opts.height);
       URL.revokeObjectURL(url);
       canvas.toBlob((blob) => {
         if (!blob) {

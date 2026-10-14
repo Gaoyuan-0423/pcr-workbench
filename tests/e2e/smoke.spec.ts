@@ -237,3 +237,30 @@ test('换新表后刷新：恢复的应是新表而不是旧课题', async ({ pa
   // 结果应是新表的数据（存在 ΔΔCt 结果表即证明不是旧示例）
   await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
 });
+
+test('图表定制：多基因分段 + 显著性模式 + Prism 导出', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('cfx-style.csv'));
+  await page.getByText('已解析 cfx-style.csv').waitFor({ timeout: 15_000 });
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  await page.locator('.check-list label', { hasText: 'Control-1' }).locator('input').check();
+  await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
+  await page.getByText('ΔΔCt 结果表').waitFor({ timeout: 10_000 });
+
+  // 打开图表设置：改标题 → SVG 内标题变化；开多基因合并 → 出现基因段标签
+  await page.getByText('⚙️ 图表设置').click();
+  await page.getByRole('textbox', { name: '标题', exact: true }).fill('我的qPCR结果');
+  await expect(page.locator('.chart-preview svg text', { hasText: '我的qPCR结果' })).toBeVisible();
+  await page.getByText('合并多基因作图').locator('input').check();
+  await expect(page.locator('.chart-preview svg text', { hasText: 'PKM' })).toBeVisible();
+
+  // 显著性模式切到 p 值
+  await page.locator('select').filter({ has: page.locator('option[value="stars"]') }).first().selectOption('p');
+
+  // Prism 导出触发下载
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: '导出 Prism 工程（.pzfx）' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toContain('.pzfx');
+});
