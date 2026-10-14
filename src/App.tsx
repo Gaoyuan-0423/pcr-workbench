@@ -282,7 +282,12 @@ export default function App() {
       return;
     }
     if (n >= 4 && !canGoResults) {
-      setToast('请先设置对照组样本和内参基因');
+      // 配置齐全但没有结果 → 把引擎的真实告警（如内参未检出）说清楚
+      if (config.controlSamples.length > 0 && config.refGenes.length > 0 && out && out.results.length === 0 && out.warnings.length > 0) {
+        setToast('无法计算 ΔΔCt：' + out.warnings[0]);
+      } else {
+        setToast('请先设置对照组样本和内参基因');
+      }
       return;
     }
     setStep(n);

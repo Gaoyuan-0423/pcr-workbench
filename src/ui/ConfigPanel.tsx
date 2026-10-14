@@ -191,22 +191,29 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
               内参基因（可多选，池化） <span style={{ color: 'var(--danger)' }}>*</span>
             </div>
             <div className="check-list">
-              {genes.map((g) => (
-                <label key={g}>
-                  <input
-                    type="checkbox"
-                    checked={config.refGenes.includes(g)}
-                    onChange={(e) => {
-                      const next = e.target.checked
-                        ? [...config.refGenes, g]
-                        : config.refGenes.filter((x) => x !== g);
-                      onConfig({ ...config, refGenes: next });
-                    }}
-                  />
-                  {g}
-                  <span className="tag">{rows.filter((r) => r.target === g).length} 孔</span>
-                </label>
-              ))}
+              {genes.map((g) => {
+                const geneRows = rows.filter((r) => r.target === g);
+                const detected = geneRows.filter((r) => Number.isFinite(r.cq)).length;
+                const total = geneRows.length;
+                return (
+                  <label key={g} title={detected < total ? `该基因有 ${total - detected} 孔未检出 Cq，作内参会导致相关样本无法计算` : undefined}>
+                    <input
+                      type="checkbox"
+                      checked={config.refGenes.includes(g)}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...config.refGenes, g]
+                          : config.refGenes.filter((x) => x !== g);
+                        onConfig({ ...config, refGenes: next });
+                      }}
+                    />
+                    {g}
+                    <span className="tag">
+                      {detected < total ? `⚠️ 检出 ${detected}/${total}` : `${total} 孔`}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           </div>
         </div>

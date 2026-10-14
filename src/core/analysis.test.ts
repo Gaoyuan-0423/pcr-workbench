@@ -173,3 +173,30 @@ describe('ΔΔCt 引擎（多组 + 显著性）', () => {
     expect(t1.refCq).toBeCloseTo(19, 10);
   });
 });
+
+describe('内参未检出场景（真实用户数据回归）', () => {
+  // 对照组 C1 的内参 GAPDH 全部未检出（'-'）→ 引擎必须显式告警而非静默 0 结果
+  const data = [
+    ['C1', 'GAPDH', '-'], ['C1', 'GAPDH', '-'],
+    ['T1', 'GAPDH', 20], ['T1', 'GAPDH', 20],
+    ['C1', 'LDHA', 25], ['C1', 'LDHA', 25], ['C1', 'LDHA', 25],
+    ['T1', 'LDHA', 23], ['T1', 'LDHA', 23], ['T1', 'LDHA', 23],
+  ].map((r) => r.map(String));
+  const rows = extractRows(data, { ...emptyMapping(), sample: 0, target: 1, cq: 2 });
+  const out = analyzeDeltaDeltaCt(rows, {
+    controlSamples: ['C1'],
+    refGenes: ['GAPDH'],
+    qc: DEFAULT_QC,
+  });
+
+  it('对照组内参未检出 → 无结果 + 两条明确告警', () => {
+    expect(out.results).toHaveLength(0);
+    expect(out.warnings.some((w) => w.includes('H22') || w.includes('未检出：') && w.includes('C1'))).toBe(true);
+    expect(out.warnings.some((w) => w.includes('对照组样本（C1）的内参基因均未检出'))).toBe(true);
+  });
+
+  it('部分样本内参未检出 → 只跳过缺失样本并告警', () => {
+    // T1 的 GAPDH 正常、C1 缺失：此时若改用 T1 也可算——但对照组缺失则整体无基准
+    expect(out.warnings.some((w) => w.includes('请更换或补充内参基因'))).toBe(true);
+  });
+});

@@ -170,6 +170,22 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
     if (refs.length) refCqBySample.set(s, mean(refs));
   }
 
+  // 内参在部分样本未检出的显式告警（否则会静默产出 0 条结果）
+  const samplesWithTarget = samples.filter((s) => targetGenes.some((g) => entries.has(`${s}||${g}`)));
+  const missingRefSamples = samplesWithTarget.filter((s) => !refCqBySample.has(s));
+  if (missingRefSamples.length > 0 && refGenes.length > 0) {
+    warnings.push(
+      `内参基因（${refGenes.join('、')}）在以下样本未检出：${missingRefSamples.join('、')}——相关 ΔCt 无法计算，请更换或补充内参基因`,
+    );
+  }
+  const ctrlAllMissing =
+    controls.length > 0 && refGenes.length > 0 && controls.every((s) => !refCqBySample.has(s));
+  if (ctrlAllMissing) {
+    warnings.push(
+      `对照组样本（${controls.join('、')}）的内参基因均未检出——无法计算 ΔΔCt，请改用其他内参基因`,
+    );
+  }
+
   // 3. 个体 ΔCt
   interface DeltaEntry {
     sample: string;
