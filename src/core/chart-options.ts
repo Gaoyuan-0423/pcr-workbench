@@ -40,13 +40,17 @@ export interface ChartOptions {
   fontFamily: 'sans-serif' | 'Times New Roman' | 'Arial';
   /** 基准字号（px），其余文字按比例缩放 */
   fontSize: number;
-  /** 组内总宽度比例（0.1–1）：每组柱簇占标准宽度的比例，越小柱越细越紧 */
+  /** 组内总宽度比例（0.2–1）：越小柱越细、同一基因内的柱簇越紧凑 */
   groupWidth: number;
+  /** 多基因图例的位置；单基因始终隐藏图例 */
+  legendPosition: 'right' | 'top' | 'bottom' | 'left' | 'none';
+  /** 整张图等比缩放，含字体与线宽；0.5–2 */
+  imageScale: number;
 }
 
 export const DEFAULT_CHART_OPTIONS: ChartOptions = {
   title: '',
-  subtitle: 'Relative expression · Fold Change (mean ± SD)',
+  subtitle: '',
   yLabel: 'Fold Change',
   xLabel: '',
   yMin: 0,
@@ -64,6 +68,8 @@ export const DEFAULT_CHART_OPTIONS: ChartOptions = {
   fontFamily: 'sans-serif',
   fontSize: 12,
   groupWidth: 0.8,
+  legendPosition: 'right',
+  imageScale: 1,
 };
 
 /** 单值校正的展示文本：星号 / p 值 / 两者 / 无。 */

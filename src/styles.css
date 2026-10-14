@@ -265,9 +265,14 @@ td.well.ntc .wellname { color: #8a9aa3; }
 .chart-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
 .chart-settings-grid label { font-size: 0.82rem; display: flex; flex-direction: column; gap: 3px; color: var(--muted-text); }
 .chart-settings-grid input[type="color"] { height: 32px; padding: 2px; }
+.chart-setting-hint { margin: 8px 0 0; font-size: 0.8rem; color: var(--muted-text); line-height: 1.5; }
+.chart-break-settings { margin-top: 14px; padding: 12px; background: var(--primary-light); border: 1px solid var(--border); border-radius: 8px; }
+.chart-break-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.88rem; font-weight: 600; }
+.chart-break-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-size: 0.82rem; }
+.chart-setting-error { margin: 8px 0 0; color: var(--danger); font-size: 0.84rem; }
 .chart-preview { background: #fff; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .chart-preview { overflow-x: auto; }
-.chart-preview svg { display: block; max-width: none; }
+.chart-preview svg { display: block; width: auto; height: auto; max-width: none; }
 
 .method-caption { margin-top: 8px; font-size: 0.82rem; color: var(--muted-text); line-height: 1.5; }
 .gene-multiselect { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; margin-top: 8px; }

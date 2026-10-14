@@ -141,11 +141,11 @@ export function downloadSvg(svg: SVGSVGElement | string, filename: string): void
   downloadBlob('\uFEFF' + xml, filename, 'image/svg+xml;charset=utf-8');
 }
 
-/** 将 SVG 字符串栅格化为 PNG；width/height 为 SVG 逻辑尺寸，scale 为导出倍率。 */
+/** 按 SVG 固有宽高栅格化为 PNG，保持文字、线条和图片比例一致。 */
 export function downloadSvgAsPng(
   svg: SVGSVGElement | string,
   filename: string,
-  opts: { width: number; height: number; scale?: number },
+  opts: { scale?: number } = {},
 ): Promise<void> {
   const scale = opts.scale ?? 2;
   return new Promise((resolve, reject) => {
@@ -155,16 +155,15 @@ export function downloadSvgAsPng(
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = opts.width * scale;
-      canvas.height = opts.height * scale;
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         URL.revokeObjectURL(url);
         reject(new Error('无法创建画布'));
         return;
       }
-      ctx.scale(scale, scale);
-      ctx.drawImage(img, 0, 0, opts.width, opts.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
       canvas.toBlob((blob) => {
         if (!blob) {

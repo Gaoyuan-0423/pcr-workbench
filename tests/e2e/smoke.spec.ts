@@ -1,9 +1,20 @@
-import { expect, test } from 'playwright/test';
+import { expect, test, type Page } from 'playwright/test';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const fixture = (name: string) => join(here, '../fixtures', name);
+
+async function openCfxChart(page: Page) {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('cfx-style.csv'));
+  await page.getByText('已解析 cfx-style.csv').waitFor({ timeout: 15_000 });
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  await page.locator('.check-list label', { hasText: 'Control-1' }).locator('input').check();
+  await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
+  await expect(page.locator('.chart-preview svg')).toBeVisible();
+}
 
 test('完整流程：导入 CFX 导出 → 映射 → 配置 → ΔΔCt 结果与导出', async ({ page }) => {
   await page.goto('/');
@@ -324,8 +335,8 @@ test('柱状图轴标签实际绘制：单基因、多基因、重命名与模�
     // 像 PNG 导出一样栅格化 SVG，直接检查轴下标签位置是否实际绘制了文字。
     const measurements = await chart.evaluate(async (element, expectedLabels) => {
       const svg = element as SVGSVGElement;
-      const plot = svg.querySelector('clipPath rect') as SVGRectElement;
-      const plotBottom = plot.y.baseVal.value + plot.height.baseVal.value;
+      const plots = Array.from(svg.querySelectorAll<SVGRectElement>('clipPath[id^="plotclip"] rect'));
+      const plotBottom = Math.max(...plots.map((plot) => plot.y.baseVal.value + plot.height.baseVal.value));
       const viewBox = svg.viewBox.baseVal;
       const canvas = document.createElement('canvas');
       canvas.width = viewBox.width;
@@ -341,7 +352,17 @@ test('柱状图轴标签实际绘制：单基因、多基因、重命名与模�
         matches: Array.from(svg.querySelectorAll('text'))
           .filter((text) => text.textContent === label && text.y.baseVal.getItem(0).value > plotBottom)
           .map((text) => {
-            const box = text.getBBox();
+            const local = text.getBBox();
+            const transform = svg.getCTM()!.inverse().multiply(text.getCTM()!);
+            const corners = [
+              new DOMPoint(local.x, local.y),
+              new DOMPoint(local.x + local.width, local.y),
+              new DOMPoint(local.x, local.y + local.height),
+              new DOMPoint(local.x + local.width, local.y + local.height),
+            ].map((point) => point.matrixTransform(transform));
+            const x = Math.min(...corners.map((point) => point.x));
+            const y = Math.min(...corners.map((point) => point.y));
+            const box = { x, y, width: Math.max(...corners.map((point) => point.x)) - x, height: Math.max(...corners.map((point) => point.y)) - y };
             const pixels = ctx.getImageData(Math.floor(box.x), Math.floor(box.y), Math.ceil(box.width), Math.ceil(box.height)).data;
             let ink = 0;
             for (let i = 0; i < pixels.length; i += 4) {
@@ -379,10 +400,193 @@ test('柱状图轴标签实际绘制：单基因、多基因、重命名与模�
 
   await page.getByRole('textbox', { name: '修改 Control-1 的显示名' }).fill('对照组');
   await page.getByRole('textbox', { name: '修改 LDHA 的显示名' }).fill('乳酸脱氢酶');
-  await expectPaintedAxisLabels(['对照组', '乳酸脱氢酶', 'PKM']);
+  await expectPaintedAxisLabels(['乳酸脱氢酶', 'PKM']);
+  await expect(chart.locator('.chart-axis-labels')).not.toContainText('对照组');
   await expect(chart.locator('.chart-legend')).toContainText('对照组');
 
   await merge.uncheck();
   await expectPaintedAxisLabels(['对照组', 'Treat-1']);
   await expect(chart.locator('.chart-legend')).toHaveCount(0);
+});
+
+test('图表字体、字号、组内总宽度及空副标题实际作用于输出 SVG', async ({ page }) => {
+  await openCfxChart(page);
+  const chart = page.locator('.chart-preview svg');
+  const subtitle = page.getByRole('textbox', { name: '副标题', exact: true });
+  await expect(subtitle).toHaveValue('');
+  await expect(chart).not.toContainText('Relative expression');
+  await subtitle.fill('测试副标题');
+  await expect(chart.locator('text', { hasText: '测试副标题' })).toHaveCount(1);
+  await subtitle.fill('');
+  await expect(chart.locator('text', { hasText: '测试副标题' })).toHaveCount(0);
+
+  for (const family of ['Times New Roman', 'Arial', 'sans-serif']) {
+    await page.getByRole('combobox', { name: '图表字体', exact: true }).selectOption(family);
+    await expect.poll(async () => chart.locator('text').evaluateAll((texts, selectedFamily) =>
+      texts.length > 0 && texts.every((text) => getComputedStyle(text).fontFamily.includes(selectedFamily)), family),
+    ).toBe(true);
+  }
+
+  const axisLabel = chart.locator('.chart-axis-labels text').first();
+  await page.getByLabel('字号（px）', { exact: true }).fill('12');
+  const originalSize = await axisLabel.evaluate((label) => Number.parseFloat(getComputedStyle(label).fontSize));
+  await page.getByLabel('字号（px）', { exact: true }).fill('');
+  await page.getByLabel('字号（px）', { exact: true }).pressSequentially('24');
+  await expect(page.getByLabel('字号（px）', { exact: true })).toHaveValue('24');
+  await expect.poll(async () => axisLabel.evaluate((label) => Number.parseFloat(getComputedStyle(label).fontSize))).toBeCloseTo(originalSize * 2);
+
+  await page.getByText('合并多基因作图').locator('input').check();
+  const barGeometry = () => chart.locator('.chart-data rect.chart-bar').evaluateAll((elements) => elements.map((element) => {
+    const rect = element as SVGRectElement;
+    return { x: rect.x.baseVal.value, width: rect.width.baseVal.value };
+  }));
+  await page.getByLabel('组内总宽度（%）', { exact: true }).fill('');
+  await page.getByLabel('组内总宽度（%）', { exact: true }).pressSequentially('40');
+  await expect(page.getByLabel('组内总宽度（%）', { exact: true })).toHaveValue('40');
+  const narrow = await barGeometry();
+  await page.getByLabel('组内总宽度（%）', { exact: true }).fill('100');
+  const wide = await barGeometry();
+  expect(narrow.length).toBeGreaterThan(1);
+  expect(wide).toHaveLength(narrow.length);
+  expect(wide[0].width).toBeGreaterThan(narrow[0].width);
+  expect(wide[1].x - wide[0].x, '组内柱中心的距离应随组宽增大').toBeGreaterThan(narrow[1].x - narrow[0].x);
+  await expect(chart.locator('.chart-axis-labels')).toContainText('LDHA');
+  await expect(chart.locator('.chart-axis-labels')).toContainText('PKM');
+});
+
+test('真正 Y 轴断轴：推荐区间保留上下柱段并在导出像素中留白', async ({ page }) => {
+  await openCfxChart(page);
+  const chart = page.locator('.chart-preview svg');
+  const clipRects = chart.locator('clipPath[id^="plotclip"] rect');
+  const toggle = page.getByLabel('启用 Y 轴断轴', { exact: true });
+  await toggle.check();
+  await expect(clipRects).toHaveCount(2);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(chart.locator('.chart-axis-break')).toHaveCount(1);
+
+  // 真断轴必须同时保留两个可见数值段；检查实际栅格化图像，避免仅验证隐藏的 SVG 节点。
+  const painted = await chart.evaluate(async (element) => {
+    const svg = element as SVGSVGElement;
+    const ranges = Array.from(svg.querySelectorAll<SVGRectElement>('clipPath[id^="plotclip"] rect'))
+      .map((rect) => ({ x: rect.x.baseVal.value, y: rect.y.baseVal.value, width: rect.width.baseVal.value, height: rect.height.baseVal.value }))
+      .sort((a, b) => a.y - b.y);
+    const canvas = document.createElement('canvas');
+    canvas.width = svg.viewBox.baseVal.width;
+    canvas.height = svg.viewBox.baseVal.height;
+    const ctx = canvas.getContext('2d')!;
+    const image = new Image();
+    image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    await image.decode();
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const countInk = (x: number, y: number, width: number, height: number, barsOnly = false) => {
+      const pixels = ctx.getImageData(x, y, width, height).data;
+      let ink = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const isBarFill = pixels[i] === pixels[i + 1] && pixels[i] === pixels[i + 2] && (pixels[i] === 26 || pixels[i] === 201);
+        if (pixels[i + 3] > 0 && (barsOnly ? isBarFill : pixels[i] < 240 || pixels[i + 1] < 240 || pixels[i + 2] < 240)) ink++;
+      }
+      return ink;
+    };
+    const [upper, lower] = ranges;
+    const gapStart = Math.ceil(upper.y + upper.height) + 1;
+    const gapEnd = Math.floor(lower.y) - 1;
+    return {
+      gap: lower.y - upper.y - upper.height,
+      gapInk: countInk(Math.ceil(upper.x) + 12, gapStart, Math.floor(upper.width) - 24, gapEnd - gapStart),
+      upperInk: countInk(Math.ceil(upper.x) + 12, Math.ceil(upper.y) + 1, Math.floor(upper.width) - 24, Math.floor(upper.height) - 2, true),
+      lowerInk: countInk(Math.ceil(lower.x) + 12, Math.ceil(lower.y) + 1, Math.floor(lower.width) - 24, Math.floor(lower.height) - 2, true),
+    };
+  });
+  expect(painted.gap).toBeGreaterThan(4);
+  expect(painted.gapInk, '省略区间必须留白，不能绘制连续的柱子或误差棒').toBe(0);
+  expect(painted.upperInk, '高柱顶部必须保留在上段').toBeGreaterThan(20);
+  expect(painted.lowerInk, '低柱及高柱下部必须保留在下段').toBeGreaterThan(20);
+
+  await page.getByLabel('下段高度占比（%）', { exact: true }).fill('40');
+  const heights = await clipRects.evaluateAll((rects) => rects.map((element) => {
+    const rect = element as SVGRectElement;
+    return { y: rect.y.baseVal.value, height: rect.height.baseVal.value };
+  }).sort((a, b) => a.y - b.y).map((rect) => rect.height));
+  expect(heights[1] / (heights[0] + heights[1])).toBeCloseTo(0.4);
+  await toggle.uncheck();
+  await expect(clipRects).toHaveCount(1);
+  await expect(chart.locator('.chart-axis-break')).toHaveCount(0);
+  await expect(chart.locator('.chart-axis-labels')).toContainText('Control-1');
+});
+
+test('断轴参数非法时提示原因并安全回退，切换对数轴会关闭断轴', async ({ page }) => {
+  await openCfxChart(page);
+  const chart = page.locator('.chart-preview svg');
+  const clipRects = chart.locator('clipPath[id^="plotclip"] rect');
+  const toggle = page.getByLabel('启用 Y 轴断轴', { exact: true });
+  await toggle.check();
+  await page.getByLabel('省略区间起点', { exact: true }).fill('8');
+  await page.getByLabel('省略区间终点', { exact: true }).fill('2');
+  await expect(page.getByRole('alert')).toContainText('省略区间');
+  await expect(clipRects).toHaveCount(1);
+  expect(await chart.evaluate((svg) => svg.outerHTML)).not.toMatch(/NaN|Infinity/);
+  await page.getByRole('button', { name: '按数据推荐断轴', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(clipRects).toHaveCount(2);
+  await page.getByRole('combobox', { name: 'Y 轴刻度', exact: true }).selectOption('log2');
+  await expect(toggle).not.toBeChecked();
+  await expect(clipRects).toHaveCount(1);
+  await expect(chart.locator('.chart-axis-break')).toHaveCount(0);
+  expect(await chart.evaluate((svg) => svg.outerHTML)).not.toMatch(/NaN|Infinity/);
+});
+
+test('多基因图例位置、图片比例及整体缩放同步应用于 SVG 和 PNG 导出', async ({ page }) => {
+  await openCfxChart(page);
+  await page.getByText('合并多基因作图').locator('input').check();
+  const chart = page.locator('.chart-preview svg');
+  const geometry = () => chart.evaluate((element) => {
+    const svg = element as SVGSVGElement;
+    const plot = svg.querySelector<SVGRectElement>('clipPath[id^="plotclip"] rect')!;
+    const legend = svg.querySelector<SVGGElement>('.chart-legend');
+    const box = legend?.getBBox();
+    return {
+      width: svg.width.baseVal.value,
+      height: svg.height.baseVal.value,
+      viewBox: { width: svg.viewBox.baseVal.width, height: svg.viewBox.baseVal.height },
+      plot: { left: plot.x.baseVal.value, right: plot.x.baseVal.value + plot.width.baseVal.value, bottom: plot.y.baseVal.value + plot.height.baseVal.value },
+      legend: box ? { left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height } : null,
+    };
+  });
+
+  await page.getByRole('combobox', { name: '图例位置', exact: true }).selectOption('right');
+  const right = await geometry();
+  expect(right.legend).not.toBeNull();
+  expect(right.legend!.left).toBeGreaterThanOrEqual(right.plot.right);
+  await page.getByRole('combobox', { name: '图例位置', exact: true }).selectOption('bottom');
+  const bottom = await geometry();
+  expect(bottom.legend).not.toBeNull();
+  expect(bottom.legend!.top).toBeGreaterThan(bottom.plot.bottom);
+  expect(bottom.legend!.bottom).toBeLessThanOrEqual(bottom.viewBox.height);
+  await page.getByRole('combobox', { name: '图例位置', exact: true }).selectOption('none');
+  await expect(chart.locator('.chart-legend')).toHaveCount(0);
+
+  await page.getByRole('combobox', { name: '图片比例', exact: true }).selectOption('1:1');
+  const square = await geometry();
+  expect(square.viewBox.width).toBe(square.viewBox.height);
+  await page.getByRole('combobox', { name: '图片比例', exact: true }).selectOption('16:9');
+  // 锁定比例后修改图宽，图高也应更新，容许整数像素舍入。
+  await page.getByLabel('图宽（px）', { exact: true }).fill('960');
+  const wide = await geometry();
+  expect(Math.abs(wide.viewBox.width / wide.viewBox.height - 16 / 9)).toBeLessThan(0.005);
+  await page.getByLabel('整体缩放（%）', { exact: true }).fill('150');
+  const scaled = await geometry();
+  expect(scaled.viewBox).toEqual(wide.viewBox);
+  expect(scaled.width).toBeCloseTo(wide.width * 1.5);
+  expect(scaled.height).toBeCloseTo(wide.height * 1.5);
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: '导出 PNG', exact: true }).click(),
+  ]);
+  const path = await download.path();
+  expect(path).not.toBeNull();
+  const png = await readFile(path!);
+  expect(png.subarray(1, 4).toString()).toBe('PNG');
+  expect(png.readUInt32BE(16), 'PNG 宽度应包含整体缩放及 2 倍导出分辨率').toBe(Math.round(scaled.width * 2));
+  expect(png.readUInt32BE(20), 'PNG 高度应包含整体缩放及 2 倍导出分辨率').toBe(Math.round(scaled.height * 2));
 });

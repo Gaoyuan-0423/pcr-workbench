@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AnalysisOutput, SampleTargetResult } from '../core/types';
 import { formatP } from '../core/stats';
 import {
@@ -13,6 +13,7 @@ import {
 import { DEFAULT_CHART_OPTIONS, type ChartOptions } from '../core/chart-options';
 import { buildBarsForGene } from '../core/chart-bars';
 import { multiGeneChartSvg } from '../core/chart-svg';
+import { getYAxisBreakError, suggestYAxisBreak } from '../core/chart-break';
 import { buildPrismPzfx } from '../core/pzfx';
 
 interface Props {
@@ -31,12 +32,37 @@ const SEVERITY_LABEL: Record<string, { zh: string; cls: string }> = {
   info: { zh: '提示', cls: 'sev-info' },
 };
 
+function ChartNumberInput({ value, min, max, step = 1, onValueChange }: {
+  value: number; min: number; max: number; step?: number; onValueChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  function commit() {
+    const parsed = draft.trim() === '' ? value : Number(draft);
+    const next = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : value;
+    setDraft(String(next));
+    onValueChange(next);
+  }
+  return <input type="number" min={min} max={max} step={step} value={draft}
+    onChange={(e) => {
+      const raw = e.target.value;
+      setDraft(raw);
+      const parsed = Number(raw);
+      // 允许先输入 2 再输入 4 得到 24，不能把编辑中的 2 立即改成最小值 8。
+      if (raw.trim() !== '' && Number.isFinite(parsed) && parsed >= min && parsed <= max) onValueChange(parsed);
+    }}
+    onBlur={commit}
+    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+  />;
+}
+
 export default function ResultsPanel({ out, fileName, rows, flags, autoReport, guessBasis, autoMelt }: Props) {
   const genes = useMemo(() => [...new Set(out.results.map((r) => r.target))], [out.results]);
   const [gene, setGene] = useState(genes[0] ?? '');
   const [multiGene, setMultiGene] = useState(false);
   const [selectedGenes, setSelectedGenes] = useState<Set<string>>(new Set());
   const [chartOpts, setChartOpts] = useState<ChartOptions>(DEFAULT_CHART_OPTIONS);
+  const [aspectRatio, setAspectRatio] = useState('custom');
 
   const activeGene = genes.includes(gene) ? gene : genes[0] ?? '';
 
@@ -88,6 +114,34 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segments, chartOpts]);
 
+  const chartValues = segments.flatMap((segment) => segment.bars.flatMap((bar) =>
+    [bar.value, bar.value - bar.err, bar.value + bar.err],
+  ));
+  const breakError = getYAxisBreakError(chartOpts.yBreak, chartOpts.yMin ?? 0);
+  const omittedEndpoints = chartOpts.yBreak && !breakError
+    ? chartValues.filter((value) => value > chartOpts.yBreak!.bottomMax && value < chartOpts.yBreak!.topMin).length
+    : 0;
+
+  function recommendBreak() {
+    setChartOpts({
+      ...chartOpts,
+      yScale: 'linear',
+      yBreak: suggestYAxisBreak(chartValues, chartOpts.yMin ?? 0),
+    });
+  }
+
+  function resizeChart(dimension: 'width' | 'height', value: number, ratio = aspectRatio) {
+    if (ratio === 'custom') {
+      setChartOpts({ ...chartOpts, [dimension]: Math.min(dimension === 'width' ? 2400 : 1600, Math.max(dimension === 'width' ? 400 : 260, value)) });
+      return;
+    }
+    const [w, h] = ratio.split(':').map(Number);
+    const r = w / h;
+    const wantedWidth = dimension === 'width' ? value : value * r;
+    const width = Math.round(Math.min(2400, 1600 * r, Math.max(400, 260 * r, wantedWidth)));
+    setChartOpts({ ...chartOpts, width, height: Math.round(width / r) });
+  }
+
   // 统计学方法脚注（图片下方文字，不画进图）
   const methodNote = useMemo(() => {
     const methods = [...new Set(out.results.filter((r) => !r.isControl).map((r) => r.statMethod).filter(Boolean))];
@@ -113,7 +167,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
   }
 
   function exportPng() {
-    void downloadSvgAsPng(svgString, baseName() + '.png', { width: chartOpts.width, height: chartOpts.height }).catch((e) => alert(String(e)));
+    void downloadSvgAsPng(svgString, baseName() + '.png').catch((e) => alert(String(e)));
   }
 
   function exportPrism() {
@@ -287,7 +341,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
             </label>
             <label>
               副标题
-              <input type="text" value={chartOpts.subtitle} onChange={(e) => setChartOpts({ ...chartOpts, subtitle: e.target.value })} />
+              <input type="text" value={chartOpts.subtitle} placeholder="留空 = 不显示" onChange={(e) => setChartOpts({ ...chartOpts, subtitle: e.target.value })} />
             </label>
             <label>
               Y 轴标题
@@ -302,49 +356,9 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
               <input type="number" step="any" placeholder="自动" value={chartOpts.yMin ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMin: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
             </label>
             <label>
-              Y 轴上限（截断位置）
-              <input type="number" step="any" placeholder="自动" value={chartOpts.yMax ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMax: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
+              Y 轴上限
+              <input type="number" step="any" placeholder={chartOpts.yBreak ? '由断轴的上段上限决定' : '自动'} disabled={!!chartOpts.yBreak} value={chartOpts.yBreak ? '' : chartOpts.yMax ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMax: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
             </label>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 18 }}>
-              <input
-                type="checkbox"
-                checked={!!chartOpts.yBreak}
-                onChange={(e) =>
-                  setChartOpts({
-                    ...chartOpts,
-                    yBreak: e.target.checked
-                      ? {
-                          bottomMax: chartOpts.yBreak?.bottomMax ?? 30,
-                          topMin: chartOpts.yBreak?.topMin ?? chartOpts.yBreak?.bottomMax ?? 60,
-                          topMax: chartOpts.yBreak?.topMax ?? (chartOpts.yBreak?.bottomMax ?? 60) * 1.5,
-                          bottomPct: 70,
-                        }
-                      : null,
-                  })
-                }
-              />
-              Y 轴截断
-            </label>
-            {chartOpts.yBreak && (
-              <>
-                <label>
-                  下段上限
-                  <input type="number" step="any" value={chartOpts.yBreak.bottomMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomMax: Number(e.target.value) } })} />
-                </label>
-                <label>
-                  上段下限
-                  <input type="number" step="any" value={chartOpts.yBreak.topMin} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMin: Number(e.target.value) } })} />
-                </label>
-                <label>
-                  上段上限
-                  <input type="number" step="any" value={chartOpts.yBreak.topMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMax: Number(e.target.value) } })} />
-                </label>
-                <label>
-                  下段占比 %
-                  <input type="number" min={10} max={90} value={chartOpts.yBreak.bottomPct} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomPct: Number(e.target.value) } })} />
-                </label>
-              </>
-            )}
             <label>
               误差棒
               <select value={chartOpts.errorBar} onChange={(e) => setChartOpts({ ...chartOpts, errorBar: e.target.value as 'sd' | 'sem' | 'none' })}>
@@ -355,7 +369,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
             </label>
             <label>
               Y 轴刻度
-              <select value={chartOpts.yScale} onChange={(e) => setChartOpts({ ...chartOpts, yScale: e.target.value as 'linear' | 'log2' | 'log10' })}>
+              <select value={chartOpts.yScale} onChange={(e) => setChartOpts({ ...chartOpts, yScale: e.target.value as 'linear' | 'log2' | 'log10', yBreak: e.target.value === 'linear' ? chartOpts.yBreak : null })}>
                 <option value="linear">线性</option>
                 <option value="log2">log2</option>
                 <option value="log10">log10</option>
@@ -379,13 +393,90 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
               <input type="color" value={chartOpts.groupColor} onChange={(e) => setChartOpts({ ...chartOpts, groupColor: e.target.value })} />
             </label>
             <label>
+              图表字体
+              <select value={chartOpts.fontFamily} onChange={(e) => setChartOpts({ ...chartOpts, fontFamily: e.target.value as ChartOptions['fontFamily'] })}>
+                <option value="sans-serif">默认无衬线</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Arial">Arial</option>
+              </select>
+            </label>
+            <label>
+              字号（px）
+              <ChartNumberInput min={8} max={28} value={chartOpts.fontSize} onValueChange={(fontSize) => setChartOpts({ ...chartOpts, fontSize })} />
+            </label>
+            <label>
+              组内总宽度（%）
+              <ChartNumberInput min={20} max={100} step={5} value={Math.round(chartOpts.groupWidth * 100)} onValueChange={(value) => setChartOpts({ ...chartOpts, groupWidth: value / 100 })} />
+            </label>
+            <label>
+              图例位置
+              <select value={chartOpts.legendPosition} disabled={segments.filter((segment) => segment.bars.length > 0).length < 2} onChange={(e) => setChartOpts({ ...chartOpts, legendPosition: e.target.value as ChartOptions['legendPosition'] })}>
+                <option value="right">右侧</option>
+                <option value="top">上方</option>
+                <option value="bottom">下方</option>
+                <option value="left">左侧</option>
+                <option value="none">隐藏</option>
+              </select>
+            </label>
+            <label>
+              图片比例
+              <select value={aspectRatio} onChange={(e) => { setAspectRatio(e.target.value); resizeChart('width', chartOpts.width, e.target.value); }}>
+                <option value="custom">自由设置</option>
+                <option value="1:1">1:1 · 正方形</option>
+                <option value="4:3">4:3 · 横图</option>
+                <option value="3:2">3:2 · 横图</option>
+                <option value="16:9">16:9 · 宽图</option>
+                <option value="3:4">3:4 · 竖图</option>
+              </select>
+            </label>
+            <label>
+              整体缩放（%）
+              <ChartNumberInput min={50} max={200} step={10} value={Math.round(chartOpts.imageScale * 100)} onValueChange={(value) => setChartOpts({ ...chartOpts, imageScale: value / 100 })} />
+            </label>
+            <label>
               图宽（px）
-              <input type="number" min={400} max={2400} value={chartOpts.width} onChange={(e) => setChartOpts({ ...chartOpts, width: Math.max(400, Number(e.target.value) || 860) })} />
+              <ChartNumberInput min={400} max={2400} value={chartOpts.width} onValueChange={(value) => resizeChart('width', value)} />
             </label>
             <label>
               图高（px）
-              <input type="number" min={260} max={1600} value={chartOpts.height} onChange={(e) => setChartOpts({ ...chartOpts, height: Math.max(260, Number(e.target.value) || 460) })} />
+              <ChartNumberInput min={260} max={1600} value={chartOpts.height} onValueChange={(value) => resizeChart('height', value)} />
             </label>
+          </div>
+          <p className="chart-setting-hint">组内总宽度控制柱簇占每个基因位置的比例。选定图片比例后，宽高同步变化；整体缩放同时缩放字体和线条。单基因不显示图例。</p>
+          <div className="chart-break-settings">
+            <label className="chart-break-toggle">
+              <input type="checkbox" checked={!!chartOpts.yBreak} disabled={chartOpts.yScale !== 'linear'} onChange={(e) => e.target.checked ? recommendBreak() : setChartOpts({ ...chartOpts, yBreak: null })} />
+              启用 Y 轴断轴
+            </label>
+            <p className="chart-setting-hint">省略中间一段数值，同时保留高柱顶部和误差棒。仅适用于线性刻度。</p>
+            {chartOpts.yBreak && (
+              <>
+                <div className="chart-settings-grid">
+                  <label>
+                    省略区间起点
+                    <input type="number" step="any" value={chartOpts.yBreak.bottomMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomMax: Number(e.target.value) } })} />
+                  </label>
+                  <label>
+                    省略区间终点
+                    <input type="number" step="any" value={chartOpts.yBreak.topMin} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMin: Number(e.target.value) } })} />
+                  </label>
+                  <label>
+                    上段上限
+                    <input type="number" step="any" value={chartOpts.yBreak.topMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMax: Number(e.target.value) } })} />
+                  </label>
+                  <label>
+                    下段高度占比（%）
+                    <input type="number" min={10} max={90} step={5} value={chartOpts.yBreak.bottomPct} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomPct: Number(e.target.value) } })} />
+                  </label>
+                </div>
+                <div className="chart-break-summary">
+                  <button type="button" onClick={recommendBreak}>按数据推荐断轴</button>
+                  {!breakError && <span>显示 {chartOpts.yMin ?? 0}–{chartOpts.yBreak.bottomMax} 和 {chartOpts.yBreak.topMin}–{chartOpts.yBreak.topMax}；中间区间省略。</span>}
+                </div>
+                {breakError && <p role="alert" className="chart-setting-error">{breakError} 修正后可导出；当前预览暂用连续坐标轴。</p>}
+                {!!omittedEndpoints && <p className="chart-setting-hint">有柱顶或误差棒端点落在省略区间内；可调整区间，或点击「按数据推荐断轴」完整显示这些端点。</p>}
+              </>
+            )}
           </div>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 10, fontSize: '0.88rem' }}>
             <input type="checkbox" checked={multiGene} onChange={(e) => setMultiGene(e.target.checked)} />
@@ -413,7 +504,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
           )}
           <div className="gene-multiselect" style={{ marginTop: 10 }}>
             <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>
-              {multiGene ? '样本名称修改（柱子下方显示名）：' : '名称修改（柱子下方显示名）：'}
+              {segments.length > 1 ? '组别名称修改（图例显示名）：' : '名称修改（柱子下方显示名）：'}
             </span>
             {chartSamples.map((s) => (
               <span key={s} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 10 }}>
@@ -480,8 +571,8 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
         )}
 
         <div className="row-actions">
-          <button onClick={() => downloadSvg(svgString, baseName() + '.svg')}>导出 SVG（矢量）</button>
-          <button className="primary" onClick={exportPng}>
+          <button disabled={!!breakError} onClick={() => downloadSvg(svgString, baseName() + '.svg')}>导出 SVG（矢量）</button>
+          <button className="primary" disabled={!!breakError} onClick={exportPng}>
             导出 PNG
           </button>
           <span style={{ flex: 1 }} />
