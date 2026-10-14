@@ -97,6 +97,87 @@ export interface MeltWellQc {
   tm: number | null;
 }
 
+// ── 熔解摘要表（LightCycler "No. Tm" 格式）解析 ──
+// 表头特征：孔位（Pos/Well）+ 峰值数（No. Tm）+ Tm 值（Tm x / Tm）；
+// 无基因列（单重实验），按孔位与主数据集连接。
+
+export interface MeltSummaryEntry {
+  peaks: number;
+  tm: number | null;
+}
+
+export interface MeltTableState {
+  fileName: string;
+  byWell: Record<string, MeltSummaryEntry>;
+}
+
+/** 识别并解析熔解摘要表；非该格式返回 null。键为规范化孔位（A1≡A01）。 */
+export function parseMeltSummaryTable(matrix: string[][]): Map<string, MeltSummaryEntry> | null {
+  let headerRow = -1;
+  let colPos = -1;
+  let colPeaks = -1;
+  let colTm = -1;
+  for (let ri = 0; ri < Math.min(8, matrix.length); ri++) {
+    const headers = matrix[ri] ?? [];
+    const iP = headers.findIndex((h) => /^(pos|well|position|孔位|孔)$/i.test(h.trim()));
+    const iPeak = headers.findIndex((h) => /no\.?\s*tm/i.test(h));
+    if (iP >= 0 && iPeak >= 0) {
+      headerRow = ri;
+      colPos = iP;
+      colPeaks = iPeak;
+      colTm = headers.findIndex((h, i) => i !== iPeak && /^tm\b|tm\s*x/i.test(h.trim()));
+      break;
+    }
+  }
+  if (headerRow < 0) return null;
+
+  const out = new Map<string, MeltSummaryEntry>();
+  for (let ri = headerRow + 1; ri < matrix.length; ri++) {
+    const row = matrix[ri];
+    const wellRaw = (row[colPos] ?? '').trim();
+    if (!wellRaw) continue;
+    const peaks = Number.parseFloat((row[colPeaks] ?? '').replace(',', '.'));
+    if (!Number.isFinite(peaks)) continue;
+    const tmRaw = colTm >= 0 ? Number.parseFloat((row[colTm] ?? '').replace(',', '.')) : NaN;
+    const wellKey = canonicalWell(wellRaw) || wellRaw.toUpperCase();
+    // 多 run 拼接文件中同孔位会重复出现，取首次（单板导出无影响）
+    if (!out.has(wellKey)) out.set(wellKey, { peaks: Math.round(peaks), tm: Number.isFinite(tmRaw) ? tmRaw : null });
+  }
+  return out.size > 0 ? out : null;
+}
+
+function canonicalWell(well: string): string {
+  const m = /^([a-z]{1,2})\s*0*(\d{1,3})$/i.exec(well.trim());
+  return m ? `${m[1].toUpperCase()}${Number(m[2])}` : '';
+}
+
+export interface MeltTableSummary {
+  checked: number;
+  single: number;
+  none: number;
+  multi: MeltWellQc[];
+}
+
+/** 熔解摘要表 × 主数据集：按规范化孔位连接，汇出整体 QC 概况（无基因维度，单重实验）。 */
+export function summarizeMeltTable(
+  byWell: Record<string, MeltSummaryEntry>,
+  rows: { well: string; sample: string; excluded?: boolean }[],
+): MeltTableSummary {
+  const summary: MeltTableSummary = { checked: 0, single: 0, none: 0, multi: [] };
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const key = canonicalWell(r.well) || r.well.trim().toUpperCase();
+    const e = byWell[key];
+    if (!e || seen.has(key) || r.excluded) continue;
+    seen.add(key);
+    summary.checked += 1;
+    if (e.peaks > 1) summary.multi.push({ sample: r.sample, well: key, peaks: e.peaks, tm: e.tm });
+    else if (e.peaks === 1) summary.single += 1;
+    else summary.none += 1;
+  }
+  return summary;
+}
+
 export interface MeltGeneSummary {
   gene: string;
   checked: number;

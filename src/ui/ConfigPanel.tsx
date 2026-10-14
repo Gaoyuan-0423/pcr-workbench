@@ -2,9 +2,11 @@ import { useMemo } from 'react';
 import type { AnalysisRow } from '../core/analysis';
 import { isFlagged, isNtcRow, isStandardRow, NTC_CONTAMINATION_CQ } from '../core/analysis';
 import { collectStandardPoints, fitStandardCurve, type StandardCurve } from '../core/standard';
+import type { MeltTableState } from '../core/melt';
 import { detectPlateLayout, parseWell } from '../core/plate';
 import type { AnalysisConfig, NtcReportEntry, QcFlags, QcSettings } from '../core/types';
 import PlateView, { type PlateCell, type PlateGrid } from './PlateView';
+import MeltTableCard from './MeltTableCard';
 
 interface Props {
   rows: AnalysisRow[];
@@ -13,6 +15,8 @@ interface Props {
   onConfig: (c: AnalysisConfig) => void;
   excluded: Record<number, boolean>;
   onExcluded: (next: Record<number, boolean>) => void;
+  meltTable: MeltTableState | null;
+  onMeltTableFile: (file: File) => Promise<void>;
 }
 
 function numOrNull(v: string): number {
@@ -21,7 +25,7 @@ function numOrNull(v: string): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
-export default function ConfigPanel({ rows, flags, config, onConfig, excluded, onExcluded }: Props) {
+export default function ConfigPanel({ rows, flags, config, onConfig, excluded, onExcluded, meltTable, onMeltTableFile }: Props) {
   const nonNtcRows = useMemo(() => rows.filter((r) => !isNtcRow(r)), [rows]);
   const samples = useMemo(
     () => [...new Set(nonNtcRows.filter((r) => !isStandardRow(r)).map((r) => r.sample).filter(Boolean))].sort(),
@@ -304,6 +308,8 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
           <p className="empty-note">没有待处理的 QC 标记。</p>
         )}
       </div>
+
+      <MeltTableCard rows={rows} meltTable={meltTable} onMeltTableFile={onMeltTableFile} />
 
       {stdFits.length > 0 && (
         <div className="card">

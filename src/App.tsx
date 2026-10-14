@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { get, set } from 'idb-keyval';
-import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow, type AnalysisRow } from './core/analysis';
-import { analyzeFileAuto, type QualityReport } from './core/auto';
-import type { MeltGeneSummary } from './core/melt';
+import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow, isStandardRow, type AnalysisRow } from './core/analysis';
+import { analyzeFileAuto, inferExperiment, type QualityReport } from './core/auto';
+import type { MeltGeneSummary, MeltTableState } from './core/melt';
+import { parseMeltSummaryTable } from './core/melt';
+import { readInputFile, sheetToRawMatrix } from './core/parse';
 import { mergeFileMatrices, type FileMatrixInput, type PerFileInfo } from './core/merge';
 import MergeSummaryPanel from './ui/MergeSummaryPanel';
 import { computeQcFlags } from './core/qc';
@@ -42,6 +44,7 @@ export default function App() {
   const [restored, setRestored] = useState(false);
   const [autoReport, setAutoReport] = useState<QualityReport | null>(null);
   const [autoMelt, setAutoMelt] = useState<MeltGeneSummary[]>([]);
+  const [meltTable, setMeltTable] = useState<MeltTableState | null>(null);
   const [guessBasis, setGuessBasis] = useState('');
   const [merged, setMerged] = useState<{ rows: AnalysisRow[]; perFile: PerFileInfo[] } | null>(null);
 
@@ -87,13 +90,39 @@ export default function App() {
     setMapping(emptyMapping());
     setMerged(m);
     setExcluded({});
-    setConfig({ controlSamples: [], refGenes: guessRefGenes(genes), qc: DEFAULT_QC });
+    // 合并流程同样自动推断对照组与常见内参
+    const samples = [...new Set(m.rows.filter((r) => !isNtcRow(r) && !isStandardRow(r)).map((r) => r.sample).filter(Boolean))].sort();
+    const guess = inferExperiment(samples, genes);
+    setConfig({
+      controlSamples: guess.controlSamples,
+      refGenes: guess.refGenes,
+      qc: DEFAULT_QC,
+    });
     setAutoReport(null);
     setAutoMelt([]);
-    setGuessBasis('');
+    setMeltTable(null);
+    setGuessBasis(guess.basis);
     setRestored(false);
     setStep(2);
-    setToast(`已合并 ${inputs.length} 个文件：${m.rows.length} 行数据，请确认后继续`);
+    setToast(`已合并 ${inputs.length} 个文件：${m.rows.length} 行数据${guess.controlSamples.length ? `，自动推断对照组 ${guess.controlSamples.length} 个样本` : '，请手动指定对照组'}`);
+  }, []);
+
+  const handleMeltTableFile = useCallback(async (file: File) => {
+    const parsed = await readInputFile(file);
+    const matrix =
+      parsed.kind === 'rdml'
+        ? parsed.matrix
+        : (parsed.sheetNames
+            .map((name) => sheetToRawMatrix(parsed.wb, name))
+            .filter((m) => m.length > 0)
+            .sort((a, b) => b.length - a.length)[0] ?? []);
+    const byWell = parseMeltSummaryTable(matrix);
+    if (!byWell) {
+      setToast('未能识别为熔解摘要表（需要 孔位 Pos/Well + 峰值数 No. Tm 列）');
+      return;
+    }
+    setMeltTable({ fileName: file.name, byWell: Object.fromEntries(byWell) });
+    setToast(`已附加熔解摘要表：${byWell.size} 个孔位`);
   }, []);
 
   const handleAutoFile = useCallback(async (file: File) => {
@@ -190,6 +219,7 @@ export default function App() {
     setConfig({ controlSamples: [], refGenes: [], qc: DEFAULT_QC });
     setAutoReport(null);
     setAutoMelt([]);
+    setMeltTable(null);
     setGuessBasis('');
     setMerged(null);
     setRestored(false);
@@ -255,6 +285,8 @@ export default function App() {
           onConfig={setConfig}
           excluded={excluded}
           onExcluded={setExcluded}
+          meltTable={meltTable}
+          onMeltTableFile={handleMeltTableFile}
         />
       )}
       {step === 4 && out && (

@@ -167,3 +167,16 @@ test('RDML 标准格式直接导入（真实 StepOne 文件）', async ({ page }
   // 只有内参基因 → 明确提示
   await expect(page.locator('.issue-list li.sev-error', { hasText: '内参基因' })).toBeVisible();
 });
+
+test('熔解摘要表附加：LightCycler No. Tm 格式按孔位连接', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('cfx-style.csv'));
+  await page.getByText('已解析 cfx-style.csv').waitFor({ timeout: 15_000 });
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  // 附加熔解摘要表
+  await page.getByRole('button', { name: '附加熔解摘要表文件' }).click();
+  await page.setInputFiles('input[type=file]', fixture('melt-summary.csv'));
+  await page.getByText('已附加 melt-summary.csv').waitFor({ timeout: 10_000 });
+  // F1（规范化孔位）Treat-3 双峰被点名
+  await expect(page.locator('.qc-flag-row', { hasText: 'Treat-3' })).toContainText('2 个熔解峰');
+});
