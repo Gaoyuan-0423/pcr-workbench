@@ -308,3 +308,81 @@ test('多基因图例与基因重命名', async ({ page }) => {
   await geneInput.fill('乳酸脱氢酶');
   await expect(page.locator('.chart-preview svg text', { hasText: '乳酸脱氢酶' }).first()).toBeVisible();
 });
+
+test('柱状图轴标签实际绘制：单基因、多基因、重命名与模式切换', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('cfx-style.csv'));
+  await page.getByText('已解析 cfx-style.csv').waitFor({ timeout: 15_000 });
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  await page.locator('.check-list label', { hasText: 'Control-1' }).locator('input').check();
+  await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
+  await page.getByText('ΔΔCt 结果表').waitFor({ timeout: 10_000 });
+
+  const chart = page.locator('.chart-preview svg');
+  const expectPaintedAxisLabels = async (labels: string[]) => {
+    // SVG clipPath 不改变文字的 bounding box；toBeVisible() 无法发现被裁掉的标签。
+    // 像 PNG 导出一样栅格化 SVG，直接检查轴下标签位置是否实际绘制了文字。
+    const measurements = await chart.evaluate(async (element, expectedLabels) => {
+      const svg = element as SVGSVGElement;
+      const plot = svg.querySelector('clipPath rect') as SVGRectElement;
+      const plotBottom = plot.y.baseVal.value + plot.height.baseVal.value;
+      const viewBox = svg.viewBox.baseVal;
+      const canvas = document.createElement('canvas');
+      canvas.width = viewBox.width;
+      canvas.height = viewBox.height;
+      const ctx = canvas.getContext('2d')!;
+      const image = new Image();
+      image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+      await image.decode();
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      return expectedLabels.map((label) => ({
+        label,
+        matches: Array.from(svg.querySelectorAll('text'))
+          .filter((text) => text.textContent === label && text.y.baseVal.getItem(0).value > plotBottom)
+          .map((text) => {
+            const box = text.getBBox();
+            const pixels = ctx.getImageData(Math.floor(box.x), Math.floor(box.y), Math.ceil(box.width), Math.ceil(box.height)).data;
+            let ink = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+              if (pixels[i + 3] > 0 && (pixels[i] < 240 || pixels[i + 1] < 240 || pixels[i + 2] < 240)) ink++;
+            }
+            return {
+              ink,
+              clipped: Boolean(text.closest('[clip-path]')),
+              belowAxis: box.y >= plotBottom,
+              insideSvg: box.x >= 0 && box.x + box.width <= viewBox.width && box.y + box.height <= viewBox.height,
+            };
+          }),
+      }));
+    }, labels);
+
+    for (const { label, matches } of measurements) {
+      expect(matches.length, `${label} 应位于 X 轴下方`).toBeGreaterThan(0);
+      for (const match of matches) {
+        expect(match.ink, `${label} 的文字区域必须存在实际绘制的像素`).toBeGreaterThan(5);
+        expect(match.clipped, `${label} 不应置于绘图区裁剪层内`).toBe(false);
+        expect(match.belowAxis).toBe(true);
+        expect(match.insideSvg).toBe(true);
+      }
+    }
+  };
+
+  await expectPaintedAxisLabels(['Control-1', 'Treat-1']);
+  await expect(chart.locator('.chart-legend')).toHaveCount(0);
+
+  const merge = page.getByText('合并多基因作图').locator('input');
+  await merge.check();
+  await expectPaintedAxisLabels(['LDHA', 'PKM']);
+  await expect(chart.locator('.chart-legend')).toHaveCount(1);
+  await expect(chart.locator('[stroke-dasharray]')).toHaveCount(0);
+
+  await page.getByRole('textbox', { name: '修改 Control-1 的显示名' }).fill('对照组');
+  await page.getByRole('textbox', { name: '修改 LDHA 的显示名' }).fill('乳酸脱氢酶');
+  await expectPaintedAxisLabels(['对照组', '乳酸脱氢酶', 'PKM']);
+  await expect(chart.locator('.chart-legend')).toContainText('对照组');
+
+  await merge.uncheck();
+  await expectPaintedAxisLabels(['对照组', 'Treat-1']);
+  await expect(chart.locator('.chart-legend')).toHaveCount(0);
+});

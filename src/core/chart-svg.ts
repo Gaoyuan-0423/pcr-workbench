@@ -118,6 +118,8 @@ export function multiGeneChartSvg(
 
   const clipId = 'plotclip' + Math.round(Math.random() * 1e6);
   const parts: string[] = [];
+  // 轴下方的名称不属于绘图区，必须在数据裁剪层之外绘制。
+  const axisLabels: string[] = [];
   parts.push(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="chart">`,
     `<defs><clipPath id="${clipId}"><rect x="${M.left}" y="${M.top}" width="${plotW}" height="${plotH}"/></clipPath></defs>`,
@@ -181,7 +183,7 @@ export function multiGeneChartSvg(
           `<line x1="${cx - half}" x2="${cx + half}" y1="${yBot}" y2="${yBot}" stroke="#1d2b32" stroke-width="1.3"/>`,
         );
       }
-      parts.push(
+      axisLabels.push(
         `<text x="${cx}" y="${M.top + plotH + 18}" font-size="${fs(11.5)}" text-anchor="middle" fill="#1d2b32" font-family="${ff}">${esc(short(b.label))}</text>`,
       );
     }
@@ -208,13 +210,15 @@ export function multiGeneChartSvg(
     }
 
     const segMid = segStart + (seg.bars.length * barStep - BAR_INNER_GAP) / 2;
-    parts.push(`<text x="${segMid}" y="${M.top + plotH + fs(40)}" font-size="${fs(12.5)}" font-weight="600" text-anchor="middle" fill="#0a5c4c" font-family="${ff}">${esc(seg.gene)}</text>`);
+    axisLabels.push(`<text x="${segMid}" y="${M.top + plotH + fs(40)}" font-size="${fs(12.5)}" font-weight="600" text-anchor="middle" fill="#0a5c4c" font-family="${ff}">${esc(seg.gene)}</text>`);
     cursor = segStart + seg.bars.length * barStep + SEG_GAP;
   }
   parts.push('</g>');
+  parts.push('<g class="chart-axis-labels">', ...axisLabels, '</g>');
 
   // 组别图例（仅多基因模式，右上角横排）
-  if (segments.length > 1 && legendItems.length > 1) {
+  if (segments.filter((seg) => seg.bars.length > 0).length > 1 && legendItems.length > 1) {
+    parts.push('<g class="chart-legend">');
     const ly = M.top + 6;
     let lx = W - M.right;
     const itemW = (label: string) => 16 + label.length * fs(6.5) + 14;
@@ -227,6 +231,7 @@ export function multiGeneChartSvg(
         `<text x="${lx + 16}" y="${ly + 10}" font-size="${fs(11)}" fill="#1d2b32" font-family="${ff}">${esc(item.label)}</text>`,
       );
     }
+    parts.push('</g>');
   }
 
   if (opts.xLabel) {
