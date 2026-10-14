@@ -154,6 +154,7 @@ export function multiGeneChartSvg(
     );
   }
   parts.push(`<line x1="${M.left}" x2="${M.left}" y1="${M.top}" y2="${M.top + plotH}" stroke="#1d2b32" stroke-width="1.2"/>`);
+  parts.push(`<line x1="${M.left}" x2="${W - M.right}" y1="${M.top + plotH}" y2="${M.top + plotH}" stroke="#1d2b32" stroke-width="1.2"/>`);
 
   parts.push(`<g clip-path="url(#${clipId})">`);
   let cursor = M.left + 8;
@@ -209,14 +210,11 @@ export function multiGeneChartSvg(
     const segMid = segStart + (seg.bars.length * barStep - BAR_INNER_GAP) / 2;
     parts.push(`<text x="${segMid}" y="${M.top + plotH + fs(40)}" font-size="${fs(12.5)}" font-weight="600" text-anchor="middle" fill="#0a5c4c" font-family="${ff}">${esc(seg.gene)}</text>`);
     cursor = segStart + seg.bars.length * barStep + SEG_GAP;
-    if (cursor < W - M.right) {
-      parts.push(`<line x1="${cursor - SEG_GAP / 2}" x2="${cursor - SEG_GAP / 2}" y1="${M.top}" y2="${M.top + plotH}" stroke="#dfe7ea" stroke-dasharray="3,3"/>`);
-    }
   }
   parts.push('</g>');
 
-  // 组别图例（右上角横排）
-  if (legendItems.length > 1) {
+  // 组别图例（仅多基因模式，右上角横排）
+  if (segments.length > 1 && legendItems.length > 1) {
     const ly = M.top + 6;
     let lx = W - M.right;
     const itemW = (label: string) => 16 + label.length * fs(6.5) + 14;
