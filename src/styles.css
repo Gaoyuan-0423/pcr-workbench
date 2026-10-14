@@ -231,3 +231,10 @@ td.well.ntc .wellname { color: #8a9aa3; }
 .merge-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .merge-row { display: flex; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; align-items: flex-start; }
 .merge-row.merge-bad { background: var(--danger-light); }
+
+/* 标准曲线 */
+.std-list { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+.std-row { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); flex-wrap: wrap; }
+.std-row.std-good { background: #f2faf6; }
+.std-row.std-warn { background: var(--warning-light); border-color: #f0d48a; }
+.std-row button { margin-left: auto; }

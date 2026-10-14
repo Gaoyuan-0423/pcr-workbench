@@ -39,6 +39,10 @@ const ALIASES: Record<ColumnKey, string[]> = {
     'task', 'task name', 'task type', 'sample role', 'role', 'well type', 'type',
     '任务', '任务类型', '孔类型', '样品类型',
   ],
+  quantity: [
+    'quantity', 'quantity mean', 'qty', 'amount', 'concentration', 'starting quantity',
+    'copy number', 'copies', 'template amount', ' dilution', '数量', '浓度', '拷贝数', '起始量',
+  ],
 };
 
 /** 表头归一化：小写、去括注、下划线/连字符转空格。 */
@@ -105,6 +109,8 @@ function contentValid(key: ColumnKey, values: string[], score = 0): boolean {
       return num < 0.75;
     case 'task':
       return num < 0.5;
+    case 'quantity':
+      return num >= 0.6;
   }
 }
 

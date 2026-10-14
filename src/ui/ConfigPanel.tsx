@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { AnalysisRow } from '../core/analysis';
-import { isFlagged, isNtcRow, NTC_CONTAMINATION_CQ } from '../core/analysis';
+import { isFlagged, isNtcRow, isStandardRow, NTC_CONTAMINATION_CQ } from '../core/analysis';
+import { collectStandardPoints, fitStandardCurve, type StandardCurve } from '../core/standard';
 import { detectPlateLayout, parseWell } from '../core/plate';
 import type { AnalysisConfig, NtcReportEntry, QcFlags, QcSettings } from '../core/types';
 import PlateView, { type PlateCell, type PlateGrid } from './PlateView';
@@ -22,7 +23,10 @@ function numOrNull(v: string): number {
 
 export default function ConfigPanel({ rows, flags, config, onConfig, excluded, onExcluded }: Props) {
   const nonNtcRows = useMemo(() => rows.filter((r) => !isNtcRow(r)), [rows]);
-  const samples = useMemo(() => [...new Set(nonNtcRows.map((r) => r.sample).filter(Boolean))].sort(), [nonNtcRows]);
+  const samples = useMemo(
+    () => [...new Set(nonNtcRows.filter((r) => !isStandardRow(r)).map((r) => r.sample).filter(Boolean))].sort(),
+    [nonNtcRows],
+  );
   const genes = useMemo(() => [...new Set(rows.map((r) => r.target).filter(Boolean))].sort(), [rows]);
   const ntcCount = rows.length - nonNtcRows.length;
 
@@ -51,6 +55,25 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
     }
     return out;
   }, [rows, excluded, flags]);
+
+  // 标准曲线拟合：每基因独立计算，点「应用」写入该基因效率（Pfaffl）
+  const stdFits = useMemo<{ gene: string; curve: StandardCurve; applied: boolean; points: number }[]>(() => {
+    const out: { gene: string; curve: StandardCurve; applied: boolean; points: number }[] = [];
+    for (const [gene, points] of collectStandardPoints(rows)) {
+      const curve = fitStandardCurve(points);
+      if (!curve) continue;
+      const applied = Math.abs((config.efficiencies?.[gene] ?? 100) - curve.effPct) < 0.15;
+      out.push({ gene, curve, applied, points: points.length });
+    }
+    return out.sort((a, b) => a.gene.localeCompare(b.gene));
+  }, [rows, config.efficiencies]);
+
+  function applyStdCurve(gene: string, curve: StandardCurve) {
+    onConfig({
+      ...config,
+      efficiencies: { ...(config.efficiencies ?? {}), [gene]: Math.round(curve.effPct * 10) / 10 },
+    });
+  }
 
   // NTC 检查预览：不依赖对照组/内参配置，直接按当前数据逐基因给出结论
   const ntcPreview = useMemo<NtcReportEntry[]>(() => {
@@ -282,6 +305,36 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
         )}
       </div>
 
+      {stdFits.length > 0 && (
+        <div className="card">
+          <h2>
+            标准曲线（自动计算效率）
+            <span className="hint">由稀释系列 Cq ~ log10(浓度) 拟合；应用后该基因走 Pfaffl 校正</span>
+          </h2>
+          <div className="std-list">
+            {stdFits.map(({ gene, curve, applied, points }) => {
+              const good = curve.r2 >= 0.98 && curve.effPct >= 90 && curve.effPct <= 110;
+              return (
+                <div className={`std-row ${good ? 'std-good' : 'std-warn'}`} key={gene}>
+                  <strong>{gene}</strong>
+                  <span>
+                    {points} 点 · 斜率 {curve.slope.toFixed(3)} · R²={curve.r2.toFixed(4)} · 效率{' '}
+                    {curve.effPct.toFixed(1)}%
+                    {!good && '（R² 或效率超出常规范围，谨慎使用）'}
+                  </span>
+                  <button
+                    className={`small ${applied ? '' : 'primary'}`}
+                    onClick={() => applyStdCurve(gene, curve)}
+                    disabled={applied}
+                  >
+                    {applied ? '✓ 已应用' : `应用 ${curve.effPct.toFixed(1)}%`}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {ntcPreview.length > 0 && (
         <div className="card">
           <h2>

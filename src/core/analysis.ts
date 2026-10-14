@@ -7,6 +7,7 @@ import type {
   SampleTargetResult,
 } from './types';
 import { mean, sd, dunnettAdjustedP, oneWayAnova, significanceStars, welchTTest } from './stats';
+// isStandardRow 定义于本文件（standard.ts 反向引用），避免循环依赖
 
 export interface AnalysisRow {
   id: number;
@@ -18,6 +19,7 @@ export interface AnalysisRow {
   target: string;
   task: string;
   cq: number;
+  quantity: number;
   excluded: boolean;
 }
 
@@ -36,6 +38,7 @@ export function extractRows(rows: string[][], mapping: ColumnMapping): AnalysisR
       target: mapping.target >= 0 ? (row[mapping.target] ?? '').trim() : '',
       task: mapping.task >= 0 ? (row[mapping.task] ?? '').trim() : '',
       cq: mapping.cq >= 0 ? Number.parseFloat((row[mapping.cq] ?? '').replace(',', '.')) : NaN,
+      quantity: mapping.quantity >= 0 ? Number.parseFloat((row[mapping.quantity] ?? '').replace(',', '.')) : NaN,
       excluded: false,
     });
   });
@@ -48,6 +51,14 @@ export function isNtcRow(row: Pick<AnalysisRow, 'sample' | 'task'>): boolean {
   if (task === 'ntc') return true;
   const sample = row.sample.toLowerCase().replace(/[\s_-]+/g, ' ');
   return /^ntc(\b|$|\s|[0-9])/.test(sample.trim());
+}
+
+/** 标准品判定：Task 列 STANDARD，或样本名 Std/Standard/标准 + 分隔符惯例。 */
+export function isStandardRow(row: Pick<AnalysisRow, 'sample' | 'task'>): boolean {
+  const task = row.task.toLowerCase().replace(/[\s_-]+/g, '');
+  if (task === 'standard' || task === 'std') return true;
+  const sample = row.sample.trim();
+  return /^(std|standard)([\s_\-]|\b|$)/i.test(sample) || /^标准([品曲样]?)([\s_\-]|\d|$)/.test(sample);
 }
 
 /** NTC 扩增 Cq 低于该值视为疑似污染；高于等于该值为晚期无害扩增。 */
@@ -65,7 +76,7 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
   const warnings: string[] = [];
   const nonExcluded = rows.filter((r) => !r.excluded);
   const ntcRows = nonExcluded.filter(isNtcRow);
-  const effective = nonExcluded.filter((r) => !isNtcRow(r));
+  const effective = nonExcluded.filter((r) => !isNtcRow(r) && !isStandardRow(r));
 
   // 1. 复孔聚合
   const agg = new Map<string, AnalysisRow[]>();

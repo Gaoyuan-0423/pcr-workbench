@@ -1,8 +1,8 @@
 // 规范列模型：所有仪器导出文件解析后统一映射到这八列。
 // plate/well/group/pairId/task 可选自动识别，sample/target/cq 必需（target 缺失时可走"样本名拆分"兜底）。
-export type ColumnKey = 'plate' | 'well' | 'sample' | 'group' | 'pairId' | 'target' | 'cq' | 'task';
+export type ColumnKey = 'plate' | 'well' | 'sample' | 'group' | 'pairId' | 'target' | 'cq' | 'task' | 'quantity';
 
-export const COLUMN_KEYS: ColumnKey[] = ['plate', 'well', 'sample', 'group', 'pairId', 'target', 'cq', 'task'];
+export const COLUMN_KEYS: ColumnKey[] = ['plate', 'well', 'sample', 'group', 'pairId', 'target', 'cq', 'task', 'quantity'];
 
 export const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string; required: boolean }> = {
   plate: { zh: '板号', en: 'Plate', required: false },
@@ -13,6 +13,7 @@ export const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string; required
   target: { zh: '目标基因', en: 'Target', required: true },
   cq: { zh: 'Cq/Ct', en: 'Cq', required: true },
   task: { zh: '任务类型', en: 'Task', required: false },
+  quantity: { zh: '数量/浓度', en: 'Quantity', required: false },
 };
 
 /** 一张工作表的原始矩阵：headers 为表头行，rows 为其后的数据行。 */
@@ -25,7 +26,7 @@ export interface SheetMatrix {
 export type ColumnMapping = Record<ColumnKey, number>;
 
 export function emptyMapping(): ColumnMapping {
-  return { plate: -1, well: -1, sample: -1, group: -1, pairId: -1, target: -1, cq: -1, task: -1 };
+  return { plate: -1, well: -1, sample: -1, group: -1, pairId: -1, target: -1, cq: -1, task: -1, quantity: -1 };
 }
 
 export function mappingComplete(m: ColumnMapping): boolean {

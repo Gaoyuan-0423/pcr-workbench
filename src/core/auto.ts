@@ -6,10 +6,14 @@ import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow, type Analysi
 import { computeQcFlags } from './qc';
 import { readWorkbookFile, sheetToRawMatrix } from './parse';
 import { sniff } from './sniff';
+import { fitAllStandardCurves } from './standard';
 import { sd } from './stats';
+import { isStandardRow } from './analysis';
 import { mappingComplete, type AnalysisConfig, type AnalysisOutput, type ColumnMapping, type QcFlags } from './types';
 
 export type IssueSeverity = 'error' | 'warning' | 'info';
+
+const SEVERITY_PENALTY: Record<IssueSeverity, number> = { error: 25, warning: 8, info: 2 };
 
 export interface Issue {
   code: string;
@@ -102,7 +106,6 @@ export function inferExperiment(
   return { controlSamples: byName, refGenes: guessRefGenes(genes), basis };
 }
 
-const SEVERITY_PENALTY: Record<IssueSeverity, number> = { error: 25, warning: 8, info: 2 };
 
 export interface ReportInput {
   rows: AnalysisRow[];
@@ -244,12 +247,19 @@ export function buildQualityReport(input: ReportInput): QualityReport {
 export function analyzeAuto(matrix: string[][], opts: { fileName?: string; sheetName?: string } = {}): AutoAnalysisResult {
   const s = sniff(matrix);
   const rows = extractRows(matrix.slice(s.headerRow + 1), s.mapping);
-  const samples = [...new Set(rows.filter((r) => !isNtcRow(r)).map((r) => r.sample).filter(Boolean))].sort();
+  const samples = [...new Set(rows.filter((r) => !isNtcRow(r) && !isStandardRow(r)).map((r) => r.sample).filter(Boolean))].sort();
   const genes = [...new Set(rows.map((r) => r.target).filter(Boolean))].sort();
-  const groupMap = new Map(rows.filter((r) => !isNtcRow(r)).map((r) => [r.sample, r.group] as const));
+  const groupMap = new Map(rows.filter((r) => !isNtcRow(r) && !isStandardRow(r)).map((r) => [r.sample, r.group] as const));
   const guess = inferExperiment(samples, genes, s.mapping.group >= 0 ? (sample) => groupMap.get(sample) ?? '' : undefined);
 
-  const config: AnalysisConfig = { controlSamples: guess.controlSamples, refGenes: guess.refGenes, qc: { minCq: NaN, maxCq: NaN, absDev: NaN, zScore: NaN } };
+  // 标准曲线：R² ≥ 0.98 的拟合自动应用为该基因效率
+  const stdCurves = fitAllStandardCurves(rows, { minR2: 0.98 });
+  const curveEfficiencies: Record<string, number> = {};
+  for (const [gene, curve] of stdCurves) {
+    curveEfficiencies[gene] = Math.round(curve.effPct * 10) / 10;
+  }
+
+  const config: AnalysisConfig = { controlSamples: guess.controlSamples, refGenes: guess.refGenes, qc: { minCq: NaN, maxCq: NaN, absDev: NaN, zScore: NaN }, efficiencies: Object.keys(curveEfficiencies).length ? curveEfficiencies : undefined };
   const flags = computeQcFlags(
     rows.filter((r) => !isNtcRow(r)).map((r) => ({ id: r.id, sample: r.sample, target: r.target, cq: r.cq, excluded: r.excluded })),
     config.qc,
@@ -263,6 +273,20 @@ export function analyzeAuto(matrix: string[][], opts: { fileName?: string; sheet
     mappingComplete: mappingComplete(s.mapping),
     headerRow: s.headerRow,
   });
+
+  // 标准曲线信息进报告
+  for (const [gene, curve] of stdCurves) {
+    report.issues.unshift({
+      code: 'STD_CURVE_APPLIED',
+      severity: Math.abs(curve.effPct - 100) > 10 ? 'warning' : 'info',
+      target: gene,
+      message: `标准曲线已应用：n=${curve.n}，斜率 ${curve.slope.toFixed(3)}，R²=${curve.r2.toFixed(4)}，效率 ${curve.effPct.toFixed(1)}%${Math.abs(curve.effPct - 100) > 10 ? '（超出 90–110% 常规区间，建议检查引物）' : ''}`,
+    });
+  }
+  report.score = Math.max(
+    0,
+    Math.min(100, 100 - report.issues.reduce((sum, i) => sum + SEVERITY_PENALTY[i.severity], 0)),
+  );
 
   return {
     fileName: opts.fileName ?? '',

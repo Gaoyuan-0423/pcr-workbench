@@ -144,3 +144,15 @@ test('多板合并：两个文件一起拖入，跨板计算 ΔΔCt', async ({ p
   // 跨板合并后 Fold Change ≈ 5.04（2^(16/3-3)）
   await expect(page.getByText('5.04')).toBeVisible();
 });
+
+test('标准曲线自动拟合：Task=STANDARD + Quantity 一键应用效率', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /一键智能分析/ }).click();
+  await page.setInputFiles('input[type=file]', fixture('standard-curve-style.csv'));
+  await page.getByText('一键智能分析报告').waitFor({ timeout: 15_000 });
+  // 报告含标准曲线应用信息（2 基因）
+  await expect(page.locator('.issue-list li', { hasText: '标准曲线已应用' })).toHaveCount(2);
+  // 效率非 100% → Pfaffl 口径
+  await expect(page.getByText(/Pfaffl 效率校正 · /)).toBeVisible();
+  await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
+});
