@@ -4,6 +4,8 @@ import type { SampleTargetResult } from './types';
 
 export interface ChartBar {
   sample: string;
+  /** 图上显示名（可被用户覆盖） */
+  label: string;
   target: string;
   value: number;
   err: number;
@@ -17,11 +19,9 @@ export interface ChartBar {
 export interface GeneSegment {
   gene: string;
   bars: ChartBar[];
-  /** 该段总宽（px，布局时计算） */
-  segmentWidth?: number;
 }
 
-/** 由结果行构建柱（支持误差棒类型与显著性标注模式）。 */
+/** 由结果行构建柱（支持误差棒类型、显著性模式与名称覆盖）。 */
 export function buildBarsForGene(
   geneResults: SampleTargetResult[],
   opts: ChartOptions,
@@ -33,6 +33,7 @@ export function buildBarsForGene(
     const stars = significanceStars(pAdj ?? r.pValue);
     return {
       sample: r.sample,
+      label: opts.labelOverrides[r.sample] ?? r.sample,
       target: r.target,
       value: mean,
       err,

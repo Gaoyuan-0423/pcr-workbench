@@ -264,3 +264,31 @@ test('图表定制：多基因分段 + 显著性模式 + Prism 导出', async ({
   ]);
   expect(download.suggestedFilename()).toContain('.pzfx');
 });
+
+test('图表定制进阶：基因勾选、名称修改、log2 刻度、统计学方法脚注', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file]', fixture('cfx-style.csv'));
+  await page.getByText('已解析 cfx-style.csv').waitFor({ timeout: 15_000 });
+  await page.getByRole('button', { name: '下一步：孔板与配置 →' }).click();
+  await page.locator('.check-list label', { hasText: 'Control-1' }).locator('input').check();
+  await page.getByRole('button', { name: '计算 ΔΔCt 并查看结果 →' }).click();
+  await page.getByText('ΔΔCt 结果表').waitFor({ timeout: 10_000 });
+
+  await page.getByText('⚙️ 图表设置').click();
+  // 多基因 + 只勾 LDHA
+  await page.getByText('合并多基因作图').locator('input').check();
+  const geneLabels = page.locator('.gene-multiselect label');
+  await geneLabels.filter({ hasText: 'PKM' }).locator('input').uncheck();
+  // 图上应只剩 LDHA 段（GAPDH 是内参不进结果表，LDHA/PKM 是目标基因）
+  await expect(page.locator('.chart-preview svg text', { hasText: 'LDHA' }).first()).toBeVisible();
+  await expect(page.locator('.chart-preview svg text', { hasText: 'PKM' })).toHaveCount(0);
+  // 名称修改：Control-1 → 对照组
+  const nameInput = page.getByRole('textbox', { name: '修改 Control-1 的显示名' });
+  await nameInput.fill('对照组');
+  await expect(page.locator('.chart-preview svg text', { hasText: '对照组' }).first()).toBeVisible();
+  // log2 刻度
+  await page.getByLabel('Y 轴刻度').selectOption('log2');
+  // 统计学方法脚注（图片下方文字）
+  await expect(page.locator('.method-caption')).toContainText('统计学方法');
+  await expect(page.locator('.method-caption')).toContainText('Dunnett');
+});

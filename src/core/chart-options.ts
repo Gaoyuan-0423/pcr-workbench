@@ -8,6 +8,8 @@ export interface ChartOptions {
   /** Y 轴范围；空 = 自动 */
   yMin: number | null;
   yMax: number | null;
+  /** Y 轴刻度类型；对数用于 FC 跨数量级的场景 */
+  yScale: 'linear' | 'log2' | 'log10';
   /** 误差棒类型 */
   errorBar: 'sd' | 'sem' | 'none';
   /** 显著性标注：星号 / p 值 / 两者 / 不显示 */
@@ -19,6 +21,8 @@ export interface ChartOptions {
   /** 输出尺寸（px） */
   width: number;
   height: number;
+  /** 柱子显示名覆盖：原始样本名 → 图上名称 */
+  labelOverrides: Record<string, string>;
 }
 
 export const DEFAULT_CHART_OPTIONS: ChartOptions = {
@@ -28,12 +32,14 @@ export const DEFAULT_CHART_OPTIONS: ChartOptions = {
   xLabel: '',
   yMin: 0,
   yMax: null,
+  yScale: 'linear',
   errorBar: 'sd',
   showP: 'stars',
   controlColor: '#9fb3ba',
   groupColor: '#0e7c66',
   width: 860,
   height: 460,
+  labelOverrides: {},
 };
 
 /** 单值校正的展示文本：星号 / p 值 / 两者 / 无。 */

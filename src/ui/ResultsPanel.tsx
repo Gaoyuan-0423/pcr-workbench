@@ -35,6 +35,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
   const genes = useMemo(() => [...new Set(out.results.map((r) => r.target))], [out.results]);
   const [gene, setGene] = useState(genes[0] ?? '');
   const [multiGene, setMultiGene] = useState(false);
+  const [selectedGenes, setSelectedGenes] = useState<Set<string>>(new Set());
   const [chartOpts, setChartOpts] = useState<ChartOptions>(DEFAULT_CHART_OPTIONS);
 
   const activeGene = genes.includes(gene) ? gene : genes[0] ?? '';
@@ -45,6 +46,14 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
 
   const geneResults = out.results.filter((r) => r.target === activeGene);
 
+  // 多基因模式下的入图基因（默认全部选中）
+  const chartGenes = useMemo(() => {
+    if (!multiGene) return [activeGene];
+    const chosen = genes.filter((g) => selectedGenes.has(g));
+    return chosen.length > 0 ? chosen : genes;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiGene, genes, selectedGenes, activeGene]);
+
   function baseName(): string {
     const genesTag = multiGene ? 'multi' : activeGene;
     return (fileName.replace(/\.[^.]+$/, '') || 'pcr-workbench') + `-${genesTag || 'results'}`;
@@ -52,8 +61,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
 
   // 图表段（单基因或多基因分段）
   const segments = useMemo(() => {
-    const targetGenes = multiGene ? genes : [activeGene];
-    return targetGenes
+    return chartGenes
       .filter(Boolean)
       .map((g) => ({
         gene: g,
@@ -64,12 +72,25 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
         ),
       }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [out.results, genes, activeGene, multiGene, chartOpts]);
+  }, [out.results, chartGenes, chartOpts]);
 
   const svgString = useMemo(() => {
     return multiGeneChartSvg(segments, chartOpts);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segments, chartOpts]);
+
+  // 统计学方法脚注（图片下方文字，不画进图）
+  const methodNote = useMemo(() => {
+    const methods = [...new Set(out.results.filter((r) => !r.isControl).map((r) => r.statMethod).filter(Boolean))];
+    if (methods.length === 0) return null;
+    return '统计学方法：' + methods.join('；') + '；误差棒 = ' + (chartOpts.errorBar === 'sem' ? 'SEM' : chartOpts.errorBar === 'none' ? '无' : 'SD') + '。';
+  }, [out.results, chartOpts.errorBar]);
+
+  // 图上柱子的样本显示名覆盖（唯一样本列表）
+  const chartSamples = useMemo(
+    () => [...new Set(out.results.map((r) => r.sample))],
+    [out.results],
+  );
 
   function exportExcel() {
     const wb = buildWorkbook(out, rows, flags, {
@@ -282,6 +303,14 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
               </select>
             </label>
             <label>
+              Y 轴刻度
+              <select value={chartOpts.yScale} onChange={(e) => setChartOpts({ ...chartOpts, yScale: e.target.value as 'linear' | 'log2' | 'log10' })}>
+                <option value="linear">线性</option>
+                <option value="log2">log2</option>
+                <option value="log10">log10</option>
+              </select>
+            </label>
+            <label>
               显著性标注
               <select value={chartOpts.showP} onChange={(e) => setChartOpts({ ...chartOpts, showP: e.target.value as 'stars' | 'p' | 'both' | 'none' })}>
                 <option value="stars">星号（*/**/***）</option>
@@ -311,6 +340,46 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
             <input type="checkbox" checked={multiGene} onChange={(e) => setMultiGene(e.target.checked)} />
             合并多基因作图（分段柱状图：每基因一段，段内为各样本 vs 对照）
           </label>
+          {multiGene && (
+            <div className="gene-multiselect">
+              <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>入图基因：</span>
+              {genes.map((g) => (
+                <label key={g} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 12, fontSize: '0.85rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedGenes.size === 0 ? true : selectedGenes.has(g)}
+                    onChange={(e) => {
+                      const next = new Set(selectedGenes.size === 0 ? genes : selectedGenes);
+                      if (e.target.checked) next.add(g);
+                      else if (next.size > 1) next.delete(g); // 至少保留一个
+                      setSelectedGenes(next);
+                    }}
+                  />
+                  {g}
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="gene-multiselect" style={{ marginTop: 10 }}>
+            <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>名称修改（柱子下方显示名）：</span>
+            {chartSamples.map((s) => (
+              <span key={s} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 10 }}>
+                <input
+                  type="text"
+                  className="label-input"
+                  placeholder={s}
+                  value={chartOpts.labelOverrides[s] ?? ''}
+                  onChange={(e) => {
+                    const next = { ...chartOpts.labelOverrides };
+                    if (e.target.value.trim() === '') delete next[s];
+                    else next[s] = e.target.value.trim();
+                    setChartOpts({ ...chartOpts, labelOverrides: next });
+                  }}
+                  aria-label={'修改 ' + s + ' 的显示名'}
+                />
+              </span>
+            ))}
+          </div>
         </details>
 
         <div
@@ -318,6 +387,9 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
           // SVG 字符串由本仓库生成器产出（内容已转义）
           dangerouslySetInnerHTML={{ __html: svgString }}
         />
+        {methodNote && (
+          <p className="method-caption">{methodNote}</p>
+        )}
 
         <div className="row-actions">
           <button onClick={() => downloadSvg(svgString, baseName() + '.svg')}>导出 SVG（矢量）</button>

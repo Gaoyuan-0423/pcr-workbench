@@ -267,3 +267,7 @@ td.well.ntc .wellname { color: #8a9aa3; }
 .chart-settings-grid input[type="color"] { height: 32px; padding: 2px; }
 .chart-preview { background: #fff; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .chart-preview svg { width: 100%; height: auto; display: block; }
+
+.method-caption { margin-top: 8px; font-size: 0.82rem; color: var(--muted-text); line-height: 1.5; }
+.gene-multiselect { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; margin-top: 8px; }
+.label-input { width: 90px; padding: 4px 8px; font-size: 0.84rem; }
