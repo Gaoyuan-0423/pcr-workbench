@@ -38,6 +38,7 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 
 .suite-bar { background: var(--surface); border-bottom: 1px solid var(--border); }
 .suite-bar-inner { max-width: 1240px; margin: 0 auto; padding: 0 26px; min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.suite-with-home { flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
 .suite-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: 0.02em; }
 .suite-mark { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; color: var(--primary); background: var(--primary-light); border-radius: 9px; }
 .suite-nav { display: flex; gap: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
@@ -375,6 +376,7 @@ td.well.ntc .wellname { color: #8a9aa3; }
 
 @media (max-width: 440px) {
   .suite-bar-inner { padding: 0 14px; gap: 10px; }
+  .suite-with-home { padding-top: 10px; padding-bottom: 10px; }
   .suite-brand { font-size: 12px; gap: 7px; }
   .suite-mark { width: 27px; height: 27px; }
   .suite-nav { padding: 3px; gap: 2px; }

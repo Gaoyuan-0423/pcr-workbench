@@ -34,6 +34,13 @@ const idbKv = { get, set, del };
 
 const STORAGE_KEY = 'pcr-workbench:project:v1';
 const LAST_KEY = 'pcr-workbench:last:v1';
+const suiteHost = window.location.hostname.toLowerCase();
+const isWispLab = suiteHost === 'wisplab.top' || suiteHost.endsWith('.wisplab.top');
+const suiteLinks = {
+  wb: isWispLab ? 'https://wb.wisplab.top/' : 'https://gaoyuan-0423.github.io/blot-workbench/',
+  pathology: isWispLab ? 'https://pathology.wisplab.top/' : 'https://gaoyuan-0423.github.io/pathology-workbench/',
+  pcr: isWispLab ? 'https://pcr.wisplab.top/' : 'https://gaoyuan-0423.github.io/pcr-workbench/',
+};
 
 interface ProjectState {
   fileName: string;
@@ -393,12 +400,13 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="suite-bar">
-        <div className="suite-bar-inner">
+        <div className={`suite-bar-inner${isWispLab ? ' suite-with-home' : ''}`}>
           <span className="suite-brand"><span className="suite-mark"><UiIcon name="grid" /></span>实验工作台</span>
           <nav className="suite-nav" aria-label="实验工作台导航">
-            <a href="https://gaoyuan-0423.github.io/blot-workbench/">WB</a>
-            <a href="https://gaoyuan-0423.github.io/pathology-workbench/">病理</a>
-            <a href="https://gaoyuan-0423.github.io/pcr-workbench/" aria-current="page">PCR</a>
+            {isWispLab && <a href="https://wisplab.top/">总首页</a>}
+            <a href={suiteLinks.wb}>WB</a>
+            <a href={suiteLinks.pathology}>病理</a>
+            <a href={suiteLinks.pcr} aria-current="page">PCR</a>
           </nav>
         </div>
       </div>
