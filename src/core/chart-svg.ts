@@ -28,7 +28,7 @@ export function computeChartWidth(segments: SegmentInput[], opts: { groupWidth: 
 }
 
 /** 断轴省略中间区间，上下两段分别保留柱体和误差棒。 */
-export function multiGeneChartSvg(segments: SegmentInput[], opts: ChartOptions): string {
+export function multiGeneChartSvg(segments: SegmentInput[], opts: ChartOptions, accessibleLabel = 'chart'): string {
   const active = segments.filter((segment) => segment.bars.length > 0);
   const multi = active.length > 1;
   const fontSize = clamp(opts.fontSize, 8, 28, 12);
@@ -144,7 +144,7 @@ export function multiGeneChartSvg(segments: SegmentInput[], opts: ChartOptions):
     ? `<rect x="${left}" y="${brokenScale.gapBottom}" width="${plotW}" height="${brokenScale.lowerHeight}"/><rect x="${left}" y="${top}" width="${plotW}" height="${brokenScale.upperHeight}"/>`
     : `<rect x="${left}" y="${top}" width="${plotW}" height="${plotH}"/>`;
   const parts = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W * imageScale}" height="${H * imageScale}" viewBox="0 0 ${W} ${H}" role="img" aria-label="chart">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W * imageScale}" height="${H * imageScale}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(accessibleLabel)}">`,
     `<defs><clipPath id="${clipId}">${clipRects}</clipPath></defs>`,
     `<rect width="${W}" height="${H}" fill="#ffffff"/>`,
   ];

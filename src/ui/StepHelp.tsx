@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useState } from 'react';
 
 const HELP: Record<number, { title: string; items: string[] }[]> = {
@@ -59,6 +60,7 @@ const HELP: Record<number, { title: string; items: string[] }[]> = {
 
 /** 分步使用说明（折叠面板，默认收起）。 */
 export function StepHelp({ step }: { step: number }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const content = HELP[step];
   if (!content) return null;
@@ -70,15 +72,14 @@ export function StepHelp({ step }: { step: number }) {
           setOpen(!open);
         }}
       >
-        ❓ 这一步怎么做？
-      </summary>
+        {t("❓ 这一步怎么做？")}</summary>
       <div className="help-body">
         {content.map((section, i) => (
           <div key={i}>
-            <strong>{section.title}</strong>
+            <strong>{t(section.title)}</strong>
             <ul>
               {section.items.map((item, j) => (
-                <li key={j}>{item}</li>
+                <li key={j}>{t(item)}</li>
               ))}
             </ul>
           </div>

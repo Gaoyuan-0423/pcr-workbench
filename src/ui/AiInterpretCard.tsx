@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { MeltGeneSummary } from '../core/melt';
 import type { QualityReport } from '../core/auto';
@@ -20,6 +21,7 @@ export function AiInterpretCard({
     warnings: string[];
   };
 }) {
+  const { t, language } = useI18n();
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -35,7 +37,7 @@ export function AiInterpretCard({
     abortRef.current = controller;
     try {
       const { aiInterpret } = await import('../core/ai');
-      const text = await aiInterpret(aiConfig!, payload, controller.signal);
+      const text = await aiInterpret(aiConfig!, payload, controller.signal, language);
       setAnswer(text);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setError(e instanceof Error ? e.message : String(e));
@@ -47,31 +49,26 @@ export function AiInterpretCard({
   return (
     <div className="card">
       <h2>
-        🤖 AI 解读
-        <span className="hint">用你自己的 API Key，把分析摘要交给模型生成自然语言解读</span>
+        {t("🤖 AI 解读")}<span className="hint">{t("用你自己的 API Key，把分析摘要交给模型生成自然语言解读")}</span>
       </h2>
       {!aiConfig ? (
         <div>
           <p className="hint-line">
-            还没有配置 AI。点下方按钮填入你自己的 API 地址、模型与 Key（DeepSeek / OpenAI / Kimi
-            等任意 OpenAI 兼容服务）。Key 只保存在你的浏览器里；仅在你点击"开始解读"时，才会把
-            <strong>分析摘要</strong>（结构化结论，不含原始荧光数据）发送到你填写的地址。
-          </p>
+            {t("还没有配置 AI。点下方按钮填入你自己的 API 地址、模型与 Key（DeepSeek / OpenAI / Kimi 等任意 OpenAI 兼容服务）。Key 只保存在你的浏览器里；仅在你点击\"开始解读\"时，才会把")}<strong>{t("分析摘要")}</strong>{t("（结构化结论，不含原始荧光数据）发送到你填写的地址。")}</p>
           <button className="primary" onClick={onOpenSettings}>
-            配置我的 API
-          </button>
+            {t("配置我的 API")}</button>
         </div>
       ) : (
         <div>
           <div className="results-toolbar">
             <span className="hint-line" style={{ margin: 0 }}>
-              模型 <code>{aiConfig.model}</code> @{' '}
+              {t("模型")}{' '}<code>{aiConfig.model}</code> @{' '}
               <code>{aiConfig.baseUrl.replace(/^https:\/\//, '')}</code>
             </span>
             <span style={{ flex: 1 }} />
-            <button onClick={onOpenSettings}>修改设置</button>
+            <button onClick={onOpenSettings}>{t("修改设置")}</button>
             <button className="primary" disabled={busy} onClick={run}>
-              {busy ? '解读中…' : answer ? '重新解读' : '开始解读'}
+              {busy ? t("解读中…") : answer ? t("重新解读") : t("开始解读")}
             </button>
             {busy && (
               <button
@@ -79,13 +76,12 @@ export function AiInterpretCard({
                   abortRef.current?.abort();
                 }}
               >
-                停止
-              </button>
+                {t("停止")}</button>
             )}
           </div>
           {error && (
             <p role="alert" style={{ color: 'var(--danger)' }}>
-              {error}
+              {t(error)}
             </p>
           )}
           {answer && (

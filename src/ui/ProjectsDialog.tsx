@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useState } from 'react';
 import type { ProjectMeta } from '../core/projects';
 
@@ -11,13 +12,13 @@ interface Props {
   onNew: () => void;
 }
 
-function timeLabel(ts: number): string {
+function timeLabel(ts: number, language: string): string {
   const d = new Date(ts);
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
   return sameDay
-    ? `今天 ${d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
-    : d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+    ? `今天 ${d.toLocaleTimeString(language === 'en' ? 'en' : 'zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+    : d.toLocaleDateString(language === 'en' ? 'en' : 'zh-CN', { month: 'numeric', day: 'numeric' });
 }
 
 /** 我的课题：已保存课题列表（打开 / 重命名 / 删除）。 */
@@ -30,6 +31,7 @@ export default function ProjectsDialog({
   onClose,
   onNew,
 }: Props) {
+  const { t, language } = useI18n();
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -41,18 +43,17 @@ export default function ProjectsDialog({
   }, [projects]);
 
   return (
-    <div className="modal-overlay" role="dialog" aria-label="我的课题" onClick={onClose}>
+    <div className="modal-overlay" role="dialog" aria-label={t("我的课题")} onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <h3>我的课题</h3>
-          <span className="hint-line" style={{ margin: 0 }}>{projects.length} 个已保存</span>
+          <h3>{t("我的课题")}</h3>
+          <span className="hint-line" style={{ margin: 0 }}>{t('{0} 个已保存', [projects.length])}</span>
           <span style={{ flex: 1 }} />
           <button className="small" onClick={onNew}>
-            ＋ 新建课题
-          </button>
+            {t("＋ 新建课题")}</button>
         </div>
         {projects.length === 0 ? (
-          <p className="empty-note">还没有保存的课题。完成一次分析后会自动保存到这里。</p>
+          <p className="empty-note">{t("还没有保存的课题。完成一次分析后会自动保存到这里。")}</p>
         ) : (
           <div className="project-list">
             {projects.map((p) => (
@@ -69,7 +70,7 @@ export default function ProjectsDialog({
                           setRenaming(null);
                         }
                       }}
-                      aria-label="课题名称"
+                      aria-label={t("课题名称")}
                     />
                     <button
                       className="small primary"
@@ -78,32 +79,29 @@ export default function ProjectsDialog({
                         setRenaming(null);
                       }}
                     >
-                      保存
-                    </button>
+                      {t("保存")}</button>
                     <button className="small" onClick={() => setRenaming(null)}>
-                      取消
-                    </button>
+                      {t("取消")}</button>
                   </div>
                 ) : (
                   <>
                     <div style={{ flex: 1 }}>
                       <div>
                         <strong>{p.name}</strong>
-                        {p.id === currentId && <span className="tag-current">当前</span>}
+                        {p.id === currentId && <span className="tag-current">{t("当前")}</span>}
                         {p.score != null && (
                           <span className="hint-line" style={{ display: 'inline', marginLeft: 8 }}>
-                            质量分 {p.score}
+                            {t("质量分")}{' '}{p.score}
                           </span>
                         )}
                       </div>
                       <div className="hint-line" style={{ margin: 0 }}>
-                        {timeLabel(p.updatedAt)} · {p.rows} 行数据 · {p.fileName || '—'}
+                        {t(timeLabel(p.updatedAt, language))} · {p.rows} {' '}{t("行数据 ·")}{' '}{p.fileName || '—'}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       <button className="small primary" onClick={() => onOpen(p.id)}>
-                        打开
-                      </button>
+                        {t("打开")}</button>
                       <button
                         className="small"
                         onClick={() => {
@@ -111,21 +109,17 @@ export default function ProjectsDialog({
                           setDraft(p.name);
                         }}
                       >
-                        重命名
-                      </button>
+                        {t("重命名")}</button>
                       {confirmDelete === p.id ? (
                         <>
                           <button className="small danger" onClick={() => { onDelete(p.id); setConfirmDelete(null); }}>
-                            确认删除
-                          </button>
+                            {t("确认删除")}</button>
                           <button className="small" onClick={() => setConfirmDelete(null)}>
-                            取消
-                          </button>
+                            {t("取消")}</button>
                         </>
                       ) : (
                         <button className="small danger" onClick={() => setConfirmDelete(p.id)}>
-                          删除
-                        </button>
+                          {t("删除")}</button>
                       )}
                     </div>
                   </>
@@ -135,7 +129,7 @@ export default function ProjectsDialog({
           </div>
         )}
         <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
-          <button onClick={onClose}>关闭</button>
+          <button onClick={onClose}>{t("关闭")}</button>
         </div>
       </div>
     </div>

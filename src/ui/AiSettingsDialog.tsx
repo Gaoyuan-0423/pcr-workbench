@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useState } from 'react';
 import {
   AI_PRESETS,
@@ -15,6 +16,7 @@ interface Props {
 
 /** AI 解读设置（BYOK）：用户自己的 OpenAI 兼容 API。 */
 export default function AiSettingsDialog({ config, onSave, onClose }: Props) {
+  const { t } = useI18n();
   const [baseUrl, setBaseUrl] = useState(config?.baseUrl ?? AI_PRESETS[0].baseUrl);
   const [model, setModel] = useState(config?.model ?? AI_PRESETS[0].model);
   const [apiKey, setApiKey] = useState(config?.apiKey ?? '');
@@ -40,29 +42,27 @@ export default function AiSettingsDialog({ config, onSave, onClose }: Props) {
   }
 
   return (
-    <div className="modal-overlay" role="dialog" aria-label="AI 解读设置" onClick={onClose}>
+    <div className="modal-overlay" role="dialog" aria-label={t("AI 解读设置")} onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>🤖 AI 解读设置</h3>
+        <h3>{t("🤖 AI 解读设置")}</h3>
         <p className="hint-line">
-          填入你自己的 OpenAI 兼容 API（Key 只保存在本机浏览器，可选"记住"）。
-          只有在你点击"AI 解读"时，才会把分析摘要发送到你填写的地址。
-        </p>
+          {t("填入你自己的 OpenAI 兼容 API（Key 只保存在本机浏览器，可选\"记住\"）。 只有在你点击\"AI 解读\"时，才会把分析摘要发送到你填写的地址。")}</p>
         <div className="mapping-field" style={{ marginBottom: 10 }}>
-          <label>供应商预设</label>
-          <select value={AI_PRESETS.find((p) => p.baseUrl === baseUrl)?.name ?? AI_PRESETS[4].name} onChange={(e) => pickPreset(e.target.value)} aria-label="供应商预设">
+          <label>{t("供应商预设")}</label>
+          <select value={AI_PRESETS.find((p) => p.baseUrl === baseUrl)?.name ?? AI_PRESETS[4].name} onChange={(e) => pickPreset(e.target.value)} aria-label={t("供应商预设")}>
             {AI_PRESETS.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.name}
+              <option key={t(p.name)} value={t(p.name)}>
+                {t(p.name)}
               </option>
             ))}
           </select>
         </div>
         <div className="mapping-field" style={{ marginBottom: 10 }}>
-          <label>API 地址（Base URL）</label>
+          <label>{t("API 地址（Base URL）")}</label>
           <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.deepseek.com/v1" />
         </div>
         <div className="mapping-field" style={{ marginBottom: 10 }}>
-          <label>模型</label>
+          <label>{t("模型")}</label>
           <input type="text" value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-chat" />
         </div>
         <div className="mapping-field" style={{ marginBottom: 10 }}>
@@ -71,11 +71,10 @@ export default function AiSettingsDialog({ config, onSave, onClose }: Props) {
         </div>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.86rem', marginBottom: 12 }}>
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-          在本机记住 API Key（localStorage，明文保存，公用电脑勿勾选）
-        </label>
+          {t("在本机记住 API Key（localStorage，明文保存，公用电脑勿勾选）")}</label>
         {error && (
           <p role="alert" style={{ color: 'var(--danger)', marginBottom: 10 }}>
-            {error}
+            {t(error)}
           </p>
         )}
         <div className="row-actions" style={{ justifyContent: 'space-between' }}>
@@ -86,13 +85,11 @@ export default function AiSettingsDialog({ config, onSave, onClose }: Props) {
               onSave(null);
             }}
           >
-            清除已存配置
-          </button>
+            {t("清除已存配置")}</button>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose}>取消</button>
+            <button onClick={onClose}>{t("取消")}</button>
             <button className="primary" onClick={save}>
-              保存
-            </button>
+              {t("保存")}</button>
           </div>
         </div>
       </div>

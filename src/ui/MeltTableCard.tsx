@@ -1,4 +1,5 @@
-import { useMemo, useRef } from 'react';
+import { useI18n } from '../i18n';
+import { useMemo, useRef, useState } from 'react';
 import type { AnalysisRow } from '../core/analysis';
 import { summarizeMeltTable, type MeltTableState, type MeltTableSummary } from '../core/melt';
 
@@ -10,7 +11,9 @@ interface Props {
 
 /** 熔解摘要表（LightCycler No. Tm 格式）附加导入与 QC 概况。 */
 export default function MeltTableCard({ rows, meltTable, onMeltTableFile }: Props) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
 
   const summary: MeltTableSummary | null = useMemo(() => {
     if (!meltTable) return null;
@@ -20,33 +23,35 @@ export default function MeltTableCard({ rows, meltTable, onMeltTableFile }: Prop
   return (
     <div className="card">
       <h2>
-        熔解摘要表（可选附加）
-        <span className="hint">LightCycler "No. Tm" 格式导出；按孔位与主数据集连接</span>
+        {t("熔解摘要表（可选附加）")}<span className="hint">{t("LightCycler \"No. Tm\" 格式导出；按孔位与主数据集连接")}</span>
       </h2>
       <input
         ref={inputRef}
         type="file"
         accept=".csv,.txt,.tsv,.xlsx,.xls"
         hidden
+        aria-label={t("附加熔解摘要表文件")}
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) void onMeltTableFile(f);
+          setError('');
+          if (f) void onMeltTableFile(f).catch((error) => setError(error instanceof Error ? error.message : String(error)));
           e.target.value = '';
         }}
       />
+      {error && <p role="alert" className="chart-setting-error">{t(error)}</p>}
       {!meltTable ? (
-        <button onClick={() => inputRef.current?.click()}>附加熔解摘要表文件</button>
+        <button onClick={() => inputRef.current?.click()}>{t("附加熔解摘要表文件")}</button>
       ) : (
         <div>
           <p className="hint-line">
-            已附加 <code>{meltTable.fileName}</code>
+            {t("已附加")}{' '}<code>{meltTable.fileName}</code>
             {summary && (
               <>
-                ：连接 {summary.checked} 孔 —— 单峰 {summary.single} ·{' '}
+                {t("：连接")}{' '}{summary.checked} {' '}{t("孔 —— 单峰")}{' '}{summary.single} ·{' '}
                 <span style={{ color: summary.multi.length ? 'var(--danger)' : undefined }}>
-                  多峰 {summary.multi.length}
+                  {t("多峰")}{' '}{summary.multi.length}
                 </span>{' '}
-                · 无峰 {summary.none}
+                {t("· 无峰")}{' '}{summary.none}
               </>
             )}
           </p>
@@ -59,14 +64,14 @@ export default function MeltTableCard({ rows, meltTable, onMeltTableFile }: Prop
                   </span>
                   <span>{w.sample}</span>
                   <span className="reasons">
-                    {w.peaks} 个熔解峰{w.tm != null ? `（Tm ${w.tm}°C）` : ''}
+                    {w.peaks} {' '}{t("个熔解峰")}{w.tm != null ? `（Tm ${w.tm}°C）` : ''}
                   </span>
                 </div>
               ))}
             </div>
           )}
           <div className="row-actions">
-            <button onClick={() => inputRef.current?.click()}>更换文件</button>
+            <button onClick={() => inputRef.current?.click()}>{t("更换文件")}</button>
           </div>
         </div>
       )}

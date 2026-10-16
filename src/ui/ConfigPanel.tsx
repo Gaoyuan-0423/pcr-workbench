@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useMemo } from 'react';
 import type { AnalysisRow } from '../core/analysis';
 import { isFlagged, isNtcRow, isStandardRow, NTC_CONTAMINATION_CQ } from '../core/analysis';
@@ -26,6 +27,7 @@ function numOrNull(v: string): number {
 }
 
 export default function ConfigPanel({ rows, flags, config, onConfig, excluded, onExcluded, meltTable, onMeltTableFile }: Props) {
+  const { t, language } = useI18n();
   const nonNtcRows = useMemo(() => rows.filter((r) => !isNtcRow(r)), [rows]);
   const samples = useMemo(
     () => [...new Set(nonNtcRows.filter((r) => !isStandardRow(r)).map((r) => r.sample).filter(Boolean))].sort(),
@@ -153,19 +155,19 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
       {plates.length > 0 && (
         <div className="card">
           <h2>
-            孔板布局（{plates.length > 1 ? `${plates.length} 块板合并分析` : plates[0].layout.kind === '384' ? '384孔' : plates[0].layout.kind === '96' ? '96孔' : '自定义孔'}）
-            <span className="hint">点击孔位可剔除 / 恢复整组复孔</span>
+            {t('孔板布局（{0}）', [plates.length > 1 ? t(`${plates.length} 块板合并分析`) : plates[0].layout.kind === '384' ? t('384孔') : plates[0].layout.kind === '96' ? t('96孔') : t('自定义孔')])}
+            <span className="hint">{t("点击孔位可剔除 / 恢复整组复孔")}</span>
           </h2>
           <PlateView plates={plates} onToggle={toggleWell} />
         </div>
       )}
 
       <div className="card">
-        <h2>实验配置</h2>
+        <h2>{t("实验配置")}</h2>
         <div className="config-grid">
           <div>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              对照组样本 <span style={{ color: 'var(--danger)' }}>*</span>
+              {t("对照组样本")}{' '}<span style={{ color: 'var(--danger)' }}>*</span>
             </div>
             <div className="check-list">
               {samples.map((s) => (
@@ -181,14 +183,14 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
                     }}
                   />
                   {s}
-                  <span className="tag">{rows.filter((r) => r.sample === s).length} 孔</span>
+                  <span className="tag">{rows.filter((r) => r.sample === s).length} {' '}{t("孔")}</span>
                 </label>
               ))}
             </div>
           </div>
           <div>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              内参基因（可多选，池化） <span style={{ color: 'var(--danger)' }}>*</span>
+              {t("内参基因（可多选，池化）")}{' '}<span style={{ color: 'var(--danger)' }}>*</span>
             </div>
             <div className="check-list">
               {genes.map((g) => {
@@ -196,7 +198,7 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
                 const detected = geneRows.filter((r) => Number.isFinite(r.cq)).length;
                 const total = geneRows.length;
                 return (
-                  <label key={g} title={detected < total ? `该基因有 ${total - detected} 孔未检出 Cq，作内参会导致相关样本无法计算` : undefined}>
+                  <label key={g} title={detected < total ? t(`该基因有 ${total - detected} 孔未检出 Cq，作内参会导致相关样本无法计算`) : undefined}>
                     <input
                       type="checkbox"
                       checked={config.refGenes.includes(g)}
@@ -209,7 +211,7 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
                     />
                     {g}
                     <span className="tag">
-                      {detected < total ? `⚠️ 检出 ${detected}/${total}` : `${total} 孔`}
+                      {detected < total ? t(`⚠️ 检出 ${detected}/${total}`) : t(`${total} 孔`)}
                     </span>
                   </label>
                 );
@@ -220,8 +222,7 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
 
         <div style={{ marginTop: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
-            扩增效率（Pfaffl 校正，选填）
-            <span className="hint" style={{ fontWeight: 400 }}>留空 = 100%（Livak 法）。效率% = (10^(−1/斜率) − 1) × 100，来自标准曲线</span>
+            {t("扩增效率（Pfaffl 校正，选填）")}<span className="hint" style={{ fontWeight: 400 }}>{t("留空 = 100%（Livak 法）。效率% = (10^(−1/斜率) − 1) × 100，来自标准曲线")}</span>
           </div>
           <div className="eff-grid">
             {genes.map((g) => (
@@ -252,37 +253,36 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
         </div>
 
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>QC 规则（留空 = 不启用）</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{t("QC 规则（留空 = 不启用）")}</div>
           <div className="qc-inputs">
-            {qcInput('minCq', 'Cq 下限', '如 15')}
-            {qcInput('maxCq', 'Cq 上限', '如 35')}
-            {qcInput('absDev', '复孔绝对偏差上限', '如 0.5')}
-            {qcInput('zScore', '复孔 z 分数阈值', '如 1.1（三复孔建议 ≤1.15）')}
+            {qcInput('minCq', t("Cq 下限"), t("如 15"))}
+            {qcInput('maxCq', t("Cq 上限"), t("如 35"))}
+            {qcInput('absDev', t("复孔绝对偏差上限"), t("如 0.5"))}
+            {qcInput('zScore', t("复孔 z 分数阈值"), t("如 1.1（三复孔建议 ≤1.15）"))}
           </div>
         </div>
       </div>
 
       <div className="card">
         <h2>
-          数据 QC
-          <span className="hint">标记不影响分析，剔除后才排除</span>
+          {t("数据 QC")}<span className="hint">{t("标记不影响分析，剔除后才排除")}</span>
         </h2>
         <div className="qc-summary">
           <div className="qc-card">
             <div className="v">{rows.length}</div>
-            <div className="l">原始数据行</div>
+            <div className="l">{t("原始数据行")}</div>
           </div>
           <div className="qc-card">
             <div className="v">{flagCount}</div>
-            <div className="l">QC 标记</div>
+            <div className="l">{t("QC 标记")}</div>
           </div>
           <div className="qc-card">
             <div className="v">{excludedCount}</div>
-            <div className="l">已剔除</div>
+            <div className="l">{t("已剔除")}</div>
           </div>
           <div className="qc-card">
             <div className="v">{rows.length - excludedCount}</div>
-            <div className="l">纳入分析</div>
+            <div className="l">{t("纳入分析")}</div>
           </div>
         </div>
         {flaggedRows.length > 0 ? (
@@ -296,23 +296,21 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
                   <span>
                     {r.sample} · {r.target} · Cq={Number.isFinite(r.cq) ? r.cq : '—'}
                   </span>
-                  <span className="reasons">{(flags[r.id] ?? []).join('；')}</span>
+                  <span className="reasons">{(flags[r.id] ?? []).map((reason) => t(reason)).join(language === 'en' ? '; ' : '；')}</span>
                 </div>
               ))}
             </div>
             <div className="row-actions">
               <button className="small danger" onClick={excludeFlagged}>
-                剔除全部 {flaggedRows.length} 行标记数据
-              </button>
+                {t("剔除全部")}{' '}{flaggedRows.length} {' '}{t("行标记数据")}</button>
               {excludedCount > 0 && (
                 <button className="small" onClick={() => onExcluded({})}>
-                  恢复全部剔除
-                </button>
+                  {t("恢复全部剔除")}</button>
               )}
             </div>
           </div>
         ) : (
-          <p className="empty-note">没有待处理的 QC 标记。</p>
+          <p className="empty-note">{t("没有待处理的 QC 标记。")}</p>
         )}
       </div>
 
@@ -321,8 +319,7 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
       {stdFits.length > 0 && (
         <div className="card">
           <h2>
-            标准曲线（自动计算效率）
-            <span className="hint">由稀释系列 Cq ~ log10(浓度) 拟合；应用后该基因走 Pfaffl 校正</span>
+            {t("标准曲线（自动计算效率）")}<span className="hint">{t("由稀释系列 Cq ~ log10(浓度) 拟合；应用后该基因走 Pfaffl 校正")}</span>
           </h2>
           <div className="std-list">
             {stdFits.map(({ gene, curve, applied, points }) => {
@@ -331,16 +328,16 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
                 <div className={`std-row ${good ? 'std-good' : 'std-warn'}`} key={gene}>
                   <strong>{gene}</strong>
                   <span>
-                    {points} 点 · 斜率 {curve.slope.toFixed(3)} · R²={curve.r2.toFixed(4)} · 效率{' '}
+                    {points} {' '}{t("点 · 斜率")}{' '}{curve.slope.toFixed(3)} · R²={curve.r2.toFixed(4)} {' '}{t("· 效率")}{' '}
                     {curve.effPct.toFixed(1)}%
-                    {!good && '（R² 或效率超出常规范围，谨慎使用）'}
+                    {!good && t("（R² 或效率超出常规范围，谨慎使用）")}
                   </span>
                   <button
                     className={`small ${applied ? '' : 'primary'}`}
                     onClick={() => applyStdCurve(gene, curve)}
                     disabled={applied}
                   >
-                    {applied ? '✓ 已应用' : `应用 ${curve.effPct.toFixed(1)}%`}
+                    {applied ? t("✓ 已应用") : t(`应用 ${curve.effPct.toFixed(1)}%`)}
                   </button>
                 </div>
               );
@@ -351,15 +348,14 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
       {ntcPreview.length > 0 && (
         <div className="card">
           <h2>
-            NTC 污染检查
-            <span className="hint">无模板对照孔；NTC 已自动排除在分析之外</span>
+            {t("NTC 污染检查")}<span className="hint">{t("无模板对照孔；NTC 已自动排除在分析之外")}</span>
           </h2>
           <div className="ntc-list">
             {ntcPreview.map((e) => (
               <div className={`ntc-row ntc-${e.verdict}`} key={e.target}>
                 <strong>{e.target}</strong>
-                <span className={e.verdict === 'contaminated' ? 'reasons' : ''}>{e.message}</span>
-                <span className="tag">{e.wells.length} 孔{e.wells.length ? `：${e.wells.join(' ')}` : ''}</span>
+                <span className={e.verdict === 'contaminated' ? 'reasons' : ''}>{t(e.message)}</span>
+                <span className="tag">{e.wells.length} {' '}{t("孔")}{e.wells.length ? `：${e.wells.join(' ')}` : ''}</span>
               </div>
             ))}
           </div>
@@ -368,8 +364,7 @@ export default function ConfigPanel({ rows, flags, config, onConfig, excluded, o
       {ntcCount > 0 && ntcPreview.length === 0 && (
         <div className="card">
           <h2>
-            NTC 污染检查
-            <span className="hint">检测到 {ntcCount} 个 NTC 孔，但这些孔的基因没有对应样本数据，跳过判定</span>
+            {t("NTC 污染检查")}<span className="hint">{t("检测到")}{' '}{ntcCount} {' '}{t("个 NTC 孔，但这些孔的基因没有对应样本数据，跳过判定")}</span>
           </h2>
         </div>
       )}

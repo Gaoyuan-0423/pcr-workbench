@@ -1,3 +1,4 @@
+import { LanguageSwitch, withLanguage, useI18n } from './i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { del, get, set } from 'idb-keyval';
 import { analyzeDeltaDeltaCt, extractRows, guessRefGenes, isNtcRow, isStandardRow, type AnalysisRow } from './core/analysis';
@@ -61,6 +62,7 @@ const STEPS = ['导入数据', '确认映射', '孔板与配置', '分析结果'
 const STEP_NOTES = ['上传仪器导出文件', '核对自动识别的列', '检查复孔和实验设置', '查看结果与导出图表'];
 
 export default function App() {
+  const { t, language } = useI18n();
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState('');
   const [sheetName, setSheetName] = useState('');
@@ -401,31 +403,32 @@ export default function App() {
     <div className="app-shell">
       <div className="suite-bar">
         <div className={`suite-bar-inner${isWispLab ? ' suite-with-home' : ''}`}>
-          <span className="suite-brand"><span className="suite-mark"><UiIcon name="grid" /></span>实验工作台</span>
-          <nav className="suite-nav" aria-label="实验工作台导航">
-            {isWispLab && <a href="https://wisplab.top/">总首页</a>}
-            <a href={suiteLinks.wb}>WB</a>
-            <a href={suiteLinks.pathology}>病理</a>
-            <a href={suiteLinks.pcr} aria-current="page">PCR</a>
+          <span className="suite-brand"><span className="suite-mark"><UiIcon name="grid" /></span>{t("实验工作台")}</span>
+          <nav className="suite-nav" aria-label={t("实验工作台导航")}>
+            {isWispLab && <a href={withLanguage("https://wisplab.top/", language)}>{t("总首页")}</a>}
+            <a href={withLanguage(suiteLinks.wb, language)}>WB</a>
+            <a href={withLanguage(suiteLinks.pathology, language)}>{t("病理")}</a>
+            <a href={withLanguage(suiteLinks.pcr, language)} aria-current="page">PCR</a>
           </nav>
+          <LanguageSwitch />
         </div>
       </div>
       <main className="container">
       <header className="app-header">
         <div className="app-title">
           <span className="app-eyebrow">PCR WORKBENCH</span>
-          <h1>PCR 工作台</h1>
-          <p className="sub">从仪器下机数据，到清晰的表达量结果与科研图表。</p>
+          <h1>{t("PCR 工作台")}</h1>
+          <p className="sub">{t("从仪器下机数据，到清晰的表达量结果与科研图表。")}</p>
         </div>
         <div className="header-tools">
           <div className="header-actions">
-            <button onClick={() => { refreshProjectList(); setShowProjects(true); }}><UiIcon name="folder" />我的课题</button>
-            <button onClick={() => setShowAiSettings(true)}><UiIcon name="settings" />AI 设置</button>
+            <button onClick={() => { refreshProjectList(); setShowProjects(true); }}><UiIcon name="folder" />{t("我的课题")}</button>
+            <button onClick={() => setShowAiSettings(true)}><UiIcon name="settings" />{t("AI 设置")}</button>
           </div>
-          <span className="privacy-note"><UiIcon name="shield" />数据在浏览器中解析与计算</span>
+          <span className="privacy-note"><UiIcon name="shield" />{t("数据在浏览器中解析与计算")}</span>
         </div>
       </header>
-      {projectName && <div className="current-project"><UiIcon name="folder" /><span>当前课题</span><strong title={projectName}>{projectName}</strong></div>}
+      {projectName && <div className="current-project"><UiIcon name="folder" /><span>{t("当前课题")}</span><strong title={projectName}>{projectName}</strong></div>}
       {showProjects && (
         <ProjectsDialog
           currentId={projectId}
@@ -486,7 +489,7 @@ export default function App() {
         />
       )}
 
-      <nav className="steps" aria-label="分析步骤">
+      <nav className="steps" aria-label={t("分析步骤")}>
         {STEPS.map((label, i) => {
           const n = i + 1;
           const cls = n === step ? 'step active' : n < step ? 'step done' : 'step';
@@ -499,7 +502,7 @@ export default function App() {
               aria-current={n === step ? 'step' : undefined}
             >
               <span className="num">{n < step ? '✓' : n}</span>
-              <span className="step-copy"><span>{label}</span><small aria-hidden="true">{STEP_NOTES[i]}</small></span>
+              <span className="step-copy"><span>{t(label)}</span><small aria-hidden="true">{t(STEP_NOTES[i])}</small></span>
             </button>
           );
         })}
@@ -507,11 +510,9 @@ export default function App() {
 
       {restored && (
         <div className="warning-banner">
-          已恢复上次的项目「{fileName}」。要重新开始，
-          <button className="small ghost" onClick={reset}>
-            点此清空
-          </button>
-          。
+          {t('已恢复上次的项目「{0}」。要重新开始，', [fileName])}<button className="small ghost" onClick={reset}>
+            {t("点此清空")}</button>
+          {language === 'en' ? '.' : '。'}
         </div>
       )}
 
@@ -595,12 +596,11 @@ export default function App() {
       )}
 
       <div className="row-actions workflow-actions">
-        <span>{step > 1 && <button onClick={() => setStep(step - 1)}>← 上一步</button>}</span>
+        <span>{step > 1 && <button onClick={() => setStep(step - 1)}>{t("← 上一步")}</button>}</span>
         <span>
           {step === 2 && (
             <button className="primary" disabled={!canGoConfig} onClick={() => goto(3)}>
-              下一步：孔板与配置 →
-            </button>
+              {t("下一步：孔板与配置 →")}</button>
           )}
           {step === 3 && (
             <button
@@ -608,18 +608,17 @@ export default function App() {
               disabled={!config.controlSamples.length || !config.refGenes.length}
               onClick={() => goto(4)}
             >
-              计算 ΔΔCt 并查看结果 →
-            </button>
+              {t("计算 ΔΔCt 并查看结果 →")}</button>
           )}
         </span>
       </div>
 
       {toast && (
         <div className="toast" role="status">
-          {toast}
+          {t(toast)}
         </div>
       )}
-      <footer className="app-footer"><span>PCR Workbench</span><span>本地分析 · 课题自动保存 · 结果随时导出</span></footer>
+      <footer className="app-footer"><span>PCR Workbench</span><span>{t("本地分析 · 课题自动保存 · 结果随时导出")}</span></footer>
       </main>
     </div>
   );

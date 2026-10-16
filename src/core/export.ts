@@ -1,3 +1,4 @@
+import { translate, type Language } from '../i18n/translate';
 import * as XLSX from 'xlsx';
 import type { AnalysisOutput, NtcReportEntry, QcFlags } from './types';
 import type { AnalysisRow } from './analysis';
@@ -9,29 +10,31 @@ const NUM = (v: number | null | undefined, digits = 4): string => {
 };
 
 /** ΔΔCt 结果表（AOA，含表头）。 */
-export function resultAoa(out: AnalysisOutput): (string | number)[][] {
+export function resultAoa(out: AnalysisOutput, language: Language = 'zh'): (string | number)[][] {
+  const t = (message: string) => translate(message, language);
   const header = [
     '基因 Target', '样本 Sample', '组别 Group', '是否对照 Control', '复孔数 n',
     '孔位 Wells', '平均 Cq', 'Cq SD', '内参 Cq (池化)', 'ΔCt', 'ΔΔCt',
     'Fold Change (2^-ΔΔCt)', 'FC SD', 'p 值（总体）', 'Dunnett 校正 p', '显著性', '统计方法',
   ];
   const rows = out.results.map((r) => [
-    r.target, r.sample, r.group || '', r.isControl ? '是' : '否', r.n,
+    r.target, r.sample, r.group || '', t(r.isControl ? '是' : '否'), r.n,
     r.wells.join(' '), NUM(r.meanCq), NUM(r.sdCq), NUM(r.refCq), NUM(r.deltaCt), NUM(r.ddCt),
-    NUM(r.foldChange), NUM(r.fcSd), formatP(r.pValue), formatP(r.pAdjusted), r.significance, r.statMethod,
+    NUM(r.foldChange), NUM(r.fcSd), formatP(r.pValue), formatP(r.pAdjusted), r.significance, t(r.statMethod),
   ]);
-  return [header, ...rows];
+  return [header.map(t), ...rows];
 }
 
 /** 原始数据 + QC 标记表。 */
-export function rawAoa(rows: AnalysisRow[], flags: QcFlags): (string | number)[][] {
+export function rawAoa(rows: AnalysisRow[], flags: QcFlags, language: Language = 'zh'): (string | number)[][] {
+  const t = (message: string) => translate(message, language);
   const header = ['行号', '板号', '孔位', '样本', '组别', '配对ID', '基因', 'Cq', 'QC 标记', '已剔除'];
   const body = rows.map((r) => [
     r.id, r.plate, r.well, r.sample, r.group, r.pairId, r.target,
     Number.isFinite(r.cq) ? NUM(r.cq) : '',
-    (flags[r.id] ?? []).join('；'), r.excluded ? '是' : '',
+    (flags[r.id] ?? []).map(t).join(language === 'en' ? '; ' : '；'), r.excluded ? t('是') : '',
   ]);
-  return [header, ...body];
+  return [header.map(t), ...body];
 }
 
 const VERDICT_LABEL: Record<NtcReportEntry['verdict'], string> = {
@@ -41,14 +44,15 @@ const VERDICT_LABEL: Record<NtcReportEntry['verdict'], string> = {
 };
 
 /** NTC 污染检查表（AOA，含表头）。 */
-export function ntcAoa(report: NtcReportEntry[]): (string | number)[][] {
+export function ntcAoa(report: NtcReportEntry[], language: Language = 'zh'): (string | number)[][] {
+  const t = (message: string) => translate(message, language);
   const header = ['基因 Target', 'NTC 孔数', '扩增孔数', '最低 Cq', '结论', '说明', 'NTC 孔位'];
   const rows = report.map((e) => [
     e.target, e.wells.length, e.amplified,
-    e.minCq != null ? NUM(e.minCq) : '未扩增',
-    VERDICT_LABEL[e.verdict], e.message, e.wells.join(' '),
+    e.minCq != null ? NUM(e.minCq) : t('未扩增'),
+    t(VERDICT_LABEL[e.verdict]), t(e.message), e.wells.join(' '),
   ]);
-  return [header, ...rows];
+  return [header.map(t), ...rows];
 }
 
 function aoaToSheet(aoa: (string | number)[][]): XLSX.WorkSheet {
@@ -56,13 +60,14 @@ function aoaToSheet(aoa: (string | number)[][]): XLSX.WorkSheet {
 }
 
 /** 熔解检查表（AOA，含表头）。 */
-export function meltAoa(melt: { gene: string; checked: number; single: number; none: number; multi: { sample: string; well: string; tm: number | null }[] }[]): (string | number)[][] {
+export function meltAoa(melt: { gene: string; checked: number; single: number; none: number; multi: { sample: string; well: string; tm: number | null }[] }[], language: Language = 'zh'): (string | number)[][] {
+  const t = (message: string) => translate(message, language);
   const header = ['基因 Target', '检查孔数', '单峰（通过）', '多峰（非特异）', '无峰', '多峰孔位与 Tm'];
   const rows = melt.map((m) => [
     m.gene, m.checked, m.single, m.multi.length, m.none,
     m.multi.map((w) => `${w.sample}@${w.well} ${w.tm ?? '—'}°C`).join('；'),
   ]);
-  return [header, ...rows];
+  return [header.map(t), ...rows];
 }
 
 /** 构建多 sheet 工作簿：结果 / 原始数据+QC / NTC检查 / 熔解检查 / 项目信息。 */
@@ -77,28 +82,30 @@ export function buildWorkbook(
     efficiencies?: Record<string, number>;
     melt?: { gene: string; checked: number; single: number; none: number; multi: { sample: string; well: string; tm: number | null }[] }[];
   },
+  language: Language = 'zh',
 ): XLSX.WorkBook {
+  const t = (message: string) => translate(message, language);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, aoaToSheet(resultAoa(out)), 'ΔΔCt结果');
-  XLSX.utils.book_append_sheet(wb, aoaToSheet(rawAoa(rows, flags)), '原始数据与QC');
+  XLSX.utils.book_append_sheet(wb, aoaToSheet(resultAoa(out, language)), t('ΔΔCt结果'));
+  XLSX.utils.book_append_sheet(wb, aoaToSheet(rawAoa(rows, flags, language)), t('原始数据与QC'));
   if (out.ntcReport.length > 0) {
-    XLSX.utils.book_append_sheet(wb, aoaToSheet(ntcAoa(out.ntcReport)), 'NTC污染检查');
+    XLSX.utils.book_append_sheet(wb, aoaToSheet(ntcAoa(out.ntcReport, language)), t('NTC污染检查'));
   }
   if (meta.melt && meta.melt.length > 0) {
-    XLSX.utils.book_append_sheet(wb, aoaToSheet(meltAoa(meta.melt)), '熔解检查');
+    XLSX.utils.book_append_sheet(wb, aoaToSheet(meltAoa(meta.melt, language)), t('熔解检查'));
   }
   const info: (string | number)[][] = [
-    ['PCR Workbench · PCR 工作台', ''],
-    ['源文件', meta.fileName],
-    ['内参基因（池化）', meta.refGenes.join('、')],
-    ['对照组样本', meta.controlSamples.join('、')],
-    ['方法', 'Livak 2^-ΔΔCt；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA + Dunnett）'],
+    [t('PCR Workbench · PCR 工作台'), ''],
+    [t('源文件'), meta.fileName],
+    [t('内参基因（池化）'), meta.refGenes.join('、')],
+    [t('对照组样本'), meta.controlSamples.join('、')],
+    [t('方法'), t('Livak 2^-ΔΔCt；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA + Dunnett）')],
     ...Object.entries(meta.efficiencies ?? {})
       .filter(([, v]) => Number.isFinite(v) && v !== 100)
-      .map(([g, v]) => [`效率 ${g}`, `${v}%（E=${(1 + v / 100).toFixed(3)}，Pfaffl 校正生效）`]),
-    ['导出时间', new Date().toLocaleString('zh-CN')],
+      .map(([g, v]) => [t(`效率 ${g}`), t(`${v}%（E=${(1 + v / 100).toFixed(3)}，Pfaffl 校正生效）`)]),
+    [t('导出时间'), new Date().toLocaleString(language === 'en' ? 'en' : 'zh-CN')],
   ];
-  XLSX.utils.book_append_sheet(wb, aoaToSheet(info), '项目信息');
+  XLSX.utils.book_append_sheet(wb, aoaToSheet(info), t('项目信息'));
   return wb;
 }
 

@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useEffect, useMemo, useState } from 'react';
 import type { AnalysisOutput, SampleTargetResult } from '../core/types';
 import { formatP } from '../core/stats';
@@ -57,6 +58,7 @@ function ChartNumberInput({ value, min, max, step = 1, onValueChange }: {
 }
 
 export default function ResultsPanel({ out, fileName, rows, flags, autoReport, guessBasis, autoMelt }: Props) {
+  const { t, language } = useI18n();
   const genes = useMemo(() => [...new Set(out.results.map((r) => r.target))], [out.results]);
   const [gene, setGene] = useState(genes[0] ?? '');
   const [multiGene, setMultiGene] = useState(false);
@@ -110,9 +112,9 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
   }, [out.results, chartGenes, chartOpts]);
 
   const svgString = useMemo(() => {
-    return multiGeneChartSvg(segments, chartOpts);
+    return multiGeneChartSvg(segments, chartOpts, t('相对表达量图'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segments, chartOpts]);
+  }, [segments, chartOpts, t]);
 
   const chartValues = segments.flatMap((segment) => segment.bars.flatMap((bar) =>
     [bar.value, bar.value - bar.err, bar.value + bar.err],
@@ -146,8 +148,8 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
   const methodNote = useMemo(() => {
     const methods = [...new Set(out.results.filter((r) => !r.isControl).map((r) => r.statMethod).filter(Boolean))];
     if (methods.length === 0) return null;
-    return '统计学方法：' + methods.join('；') + '；误差棒 = ' + (chartOpts.errorBar === 'sem' ? 'SEM' : chartOpts.errorBar === 'none' ? '无' : 'SD') + '。';
-  }, [out.results, chartOpts.errorBar]);
+    return t('统计学方法：') + methods.map((method) => t(method)).join(language === 'en' ? '; ' : '；') + t('；误差棒 = ') + (chartOpts.errorBar === 'sem' ? 'SEM' : chartOpts.errorBar === 'none' ? t('无') : 'SD') + (language === 'en' ? '.' : '。');
+  }, [out.results, chartOpts.errorBar, language, t]);
 
   // 图上柱子的样本显示名覆盖（唯一样本列表）
   const chartSamples = useMemo(
@@ -162,12 +164,12 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
       controlSamples: out.controlSamples,
       efficiencies: out.efficiencies,
       melt: autoMelt,
-    });
+    }, language);
     downloadWorkbook(wb, baseName() + '.xlsx');
   }
 
   function exportPng() {
-    void downloadSvgAsPng(svgString, baseName() + '.png').catch((e) => alert(String(e)));
+    void downloadSvgAsPng(svgString, baseName() + '.png').catch((e) => alert(t(e instanceof Error ? e.message : String(e))));
   }
 
   function exportPrism() {
@@ -189,24 +191,24 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
               style={{ backgroundImage: `conic-gradient(${autoReport.score >= 85 ? '#16a34a' : autoReport.score >= 60 ? '#d97706' : '#dc2626'} ${autoReport.score * 1}%, #e8eef0 0)` }}
             >
               <span className="score-num">{autoReport.score}</span>
-              <span className="score-cap">质量分</span>
+              <span className="score-cap">{t("质量分")}</span>
             </div>
             <div className="report-summary">
-              <h2 style={{ marginBottom: 4 }}>🪄 一键智能分析报告</h2>
-              <p>{autoReport.summary}</p>
+              <h2 style={{ marginBottom: 4 }}>{t("🪄 一键智能分析报告")}</h2>
+              <p>{t(autoReport.summary)}</p>
               {guessBasis && (
-                <p className="hint-line">实验配置为自动推断（{guessBasis}）。可在第 3 步调整后重新计算。</p>
+                <p className="hint-line">{t('实验配置为自动推断（{0}）。可在第 3 步调整后重新计算。', [t(guessBasis)])}</p>
               )}
             </div>
           </div>
           {autoReport.issues.length > 0 && (
             <div className="report-section">
-              <strong>发现的问题（{autoReport.issues.length}）</strong>
+              <strong>{t('发现的问题（{0}）', [autoReport.issues.length])}</strong>
               <ul className="issue-list">
                 {autoReport.issues.map((i, idx) => (
                   <li key={idx} className={SEVERITY_LABEL[i.severity]?.cls}>
-                    <span className="sev-chip">{SEVERITY_LABEL[i.severity]?.zh ?? i.severity}</span>
-                    <span>{i.message}</span>
+                    <span className="sev-chip">{t(SEVERITY_LABEL[i.severity]?.zh ?? i.severity)}</span>
+                    <span>{t(i.message)}</span>
                     {i.target && <code>{i.target}</code>}
                   </li>
                 ))}
@@ -215,10 +217,10 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
           )}
           {autoReport.advice.length > 0 && (
             <div className="report-section">
-              <strong>优化方向（{autoReport.advice.length}）</strong>
+              <strong>{t('优化方向（{0}）', [autoReport.advice.length])}</strong>
               <ul className="advice-list">
                 {autoReport.advice.map((a, idx) => (
-                  <li key={idx}>💡 {a.message}</li>
+                  <li key={idx}>💡 {t(a.message)}</li>
                 ))}
               </ul>
             </div>
@@ -228,20 +230,18 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
       {autoMelt && autoMelt.length > 0 && (
         <div className="card">
           <h2>
-            熔解曲线检查
-            <span className="hint">由 RDML 原始熔解数据峰检测；多峰提示非特异扩增或引物二聚体</span>
+            {t("熔解曲线检查")}<span className="hint">{t("由 RDML 原始熔解数据峰检测；多峰提示非特异扩增或引物二聚体")}</span>
           </h2>
           <div className="std-list">
             {autoMelt.map((m) => (
               <div className={`std-row ${m.multi.length > 0 ? 'std-warn' : 'std-good'}`} key={m.gene}>
                 <strong>{m.gene}</strong>
                 <span>
-                  {m.checked} 孔：单峰 {m.single} · 多峰 {m.multi.length}
-                  {m.multi.length > 0 && m.multi[0].tm != null ? `（${m.multi.map((w) => `${w.well}@${w.tm}°C`).join('、')}）` : ''} ·
-                  无峰 {m.none}
+                  {m.checked} {' '}{t("孔：单峰")}{' '}{m.single} {' '}{t("· 多峰")}{' '}{m.multi.length}
+                  {m.multi.length > 0 && m.multi[0].tm != null ? `（${m.multi.map((w) => `${w.well}@${w.tm}°C`).join('、')}）` : ''} {' '}{t("· 无峰")}{' '}{m.none}
                 </span>
                 <span className="tag" style={{ marginLeft: 'auto' }}>
-                  {m.multi.length > 0 ? '⚠️ 建议跑胶确认产物特异性' : '✓ 通过'}
+                  {m.multi.length > 0 ? t("⚠️ 建议跑胶确认产物特异性") : t("✓ 通过")}
                 </span>
               </div>
             ))}
@@ -251,21 +251,19 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
       {out.warnings.length > 0 && (
         <div className="warning-banner">
           {out.warnings.map((w, i) => (
-            <div key={i}>⚠️ {w}</div>
+            <div key={i}>⚠️ {t(w)}</div>
           ))}
         </div>
       )}
 
       <div className="card">
         <h2>
-          ΔΔCt 结果表
-          <span className="hint">
-            {out.effMode ? 'Pfaffl 效率校正 · ' : 'Livak 2^-ΔΔCt · '}
-            统计基于每个生物学重复的 ΔCt
-          </span>
+          {t("ΔΔCt 结果表")}<span className="hint">
+            {out.effMode ? t("Pfaffl 效率校正 · ") : 'Livak 2^-ΔΔCt · '}
+            {t("统计基于每个生物学重复的 ΔCt")}</span>
         </h2>
         <div className="results-toolbar">
-          <div className="gene-tabs" role="tablist" aria-label="选择基因">
+          <div className="gene-tabs" role="tablist" aria-label={t("选择基因")}>
             {genes.map((g) => (
               <button key={g} className={g === activeGene ? 'on' : ''} onClick={() => setGene(g)}>
                 {g}
@@ -274,34 +272,33 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
           </div>
           <span style={{ flex: 1 }} />
           <button className="primary" onClick={exportExcel}>
-            导出 Excel（多表，含 ΔΔCt）
-          </button>
-          <button onClick={() => downloadCsv(resultAoa(out), baseName() + '.csv')}>导出结果 CSV</button>
+            {t("导出 Excel（多表，含 ΔΔCt）")}</button>
+          <button onClick={() => downloadCsv(resultAoa(out, language), baseName() + '.csv')}>{t("导出结果 CSV")}</button>
         </div>
 
         <div className="preview-wrap" style={{ maxHeight: 420 }}>
           <table className="results">
             <thead>
               <tr>
-                <th>样本</th>
-                <th>组别</th>
+                <th>{t("样本")}</th>
+                <th>{t("组别")}</th>
                 <th>n</th>
-                <th>平均 Cq</th>
-                <th>内参 Cq</th>
+                <th>{t("平均 Cq")}</th>
+                <th>{t("内参 Cq")}</th>
                 <th>ΔCt</th>
                 <th>ΔΔCt</th>
                 <th>Fold Change</th>
-                <th>p 值（总体）</th>
+                <th>{t("p 值（总体）")}</th>
                 <th>Dunnett p</th>
-                <th>显著性</th>
-                <th>统计方法</th>
+                <th>{t("显著性")}</th>
+                <th>{t("统计方法")}</th>
               </tr>
             </thead>
             <tbody>
               {geneResults.map((r) => (
                 <tr key={r.sample + r.target} className={r.isControl ? 'ctrl' : ''}>
                   <td>
-                    {r.isControl && '对照 · '}
+                    {r.isControl && t("对照 · ")}
                     {r.sample}
                   </td>
                   <td>{r.group || '—'}</td>
@@ -316,7 +313,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
                   <td>{formatP(r.pValue)}</td>
                   <td>{formatP(r.pAdjusted)}</td>
                   <td className="sig">{r.significance || '—'}</td>
-                  <td style={{ fontSize: '0.78rem', color: 'var(--muted-text)' }}>{r.statMethod || '—'}</td>
+                  <td style={{ fontSize: '0.78rem', color: 'var(--muted-text)' }}>{t(r.statMethod || '—')}</td>
                 </tr>
               ))}
             </tbody>
@@ -326,165 +323,139 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
 
       <div className="card chart-box">
         <h2>
-          柱状图{chartOpts.title ? `——${chartOpts.title}` : multiGene ? '（多基因分段）' : `（${activeGene}）`}
-          <span className="hint">均值 ± {chartOpts.errorBar === 'sem' ? 'SEM' : chartOpts.errorBar === 'none' ? '无' : 'SD'}</span>
+          {t("柱状图")}{chartOpts.title ? `——${chartOpts.title}` : multiGene ? t("（多基因分段）") : language === 'en' ? ` (${activeGene})` : `（${activeGene}）`}
+          <span className="hint">{t("均值 ±")}{' '}{chartOpts.errorBar === 'sem' ? 'SEM' : chartOpts.errorBar === 'none' ? t("无") : 'SD'}</span>
         </h2>
 
         <div className="chart-settings">
           <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 8, color: 'var(--primary-dark)' }}>
-            ⚙️ 图表设置
-          </div>
+            {t("⚙️ 图表设置")}</div>
           <div className="chart-settings-grid">
             <label>
-              标题
-              <input type="text" value={chartOpts.title} placeholder="留空 = 基因名" onChange={(e) => setChartOpts({ ...chartOpts, title: e.target.value })} />
+              {t("标题")}<input type="text" value={chartOpts.title} placeholder={t("留空 = 基因名")} onChange={(e) => setChartOpts({ ...chartOpts, title: e.target.value })} />
             </label>
             <label>
-              副标题
-              <input type="text" value={chartOpts.subtitle} placeholder="留空 = 不显示" onChange={(e) => setChartOpts({ ...chartOpts, subtitle: e.target.value })} />
+              {t("副标题")}<input type="text" value={chartOpts.subtitle} placeholder={t("留空 = 不显示")} onChange={(e) => setChartOpts({ ...chartOpts, subtitle: e.target.value })} />
             </label>
             <label>
-              Y 轴标题
-              <input type="text" value={chartOpts.yLabel} onChange={(e) => setChartOpts({ ...chartOpts, yLabel: e.target.value })} />
+              {t("Y 轴标题")}<input type="text" value={chartOpts.yLabel} onChange={(e) => setChartOpts({ ...chartOpts, yLabel: e.target.value })} />
             </label>
             <label>
-              X 轴标题
-              <input type="text" value={chartOpts.xLabel} placeholder="留空 = 不显示" onChange={(e) => setChartOpts({ ...chartOpts, xLabel: e.target.value })} />
+              {t("X 轴标题")}<input type="text" value={chartOpts.xLabel} placeholder={t("留空 = 不显示")} onChange={(e) => setChartOpts({ ...chartOpts, xLabel: e.target.value })} />
             </label>
             <label>
-              Y 轴下限
-              <input type="number" step="any" placeholder="自动" value={chartOpts.yMin ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMin: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
+              {t("Y 轴下限")}<input type="number" step="any" placeholder={t("自动")} value={chartOpts.yMin ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMin: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
             </label>
             <label>
-              Y 轴上限
-              <input type="number" step="any" placeholder={chartOpts.yBreak ? '由断轴的上段上限决定' : '自动'} disabled={!!chartOpts.yBreak} value={chartOpts.yBreak ? '' : chartOpts.yMax ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMax: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
+              {t("Y 轴上限")}<input type="number" step="any" placeholder={chartOpts.yBreak ? t("由断轴的上段上限决定") : t("自动")} disabled={!!chartOpts.yBreak} value={chartOpts.yBreak ? '' : chartOpts.yMax ?? ''} onChange={(e) => setChartOpts({ ...chartOpts, yMax: e.target.value.trim() === '' ? null : Number(e.target.value) })} />
             </label>
             <label>
-              误差棒
-              <select value={chartOpts.errorBar} onChange={(e) => setChartOpts({ ...chartOpts, errorBar: e.target.value as 'sd' | 'sem' | 'none' })}>
+              {t("误差棒")}<select value={chartOpts.errorBar} onChange={(e) => setChartOpts({ ...chartOpts, errorBar: e.target.value as 'sd' | 'sem' | 'none' })}>
                 <option value="sd">SD</option>
                 <option value="sem">SEM</option>
-                <option value="none">不显示</option>
+                <option value="none">{t("不显示")}</option>
               </select>
             </label>
             <label>
-              Y 轴刻度
-              <select value={chartOpts.yScale} onChange={(e) => setChartOpts({ ...chartOpts, yScale: e.target.value as 'linear' | 'log2' | 'log10', yBreak: e.target.value === 'linear' ? chartOpts.yBreak : null })}>
-                <option value="linear">线性</option>
+              {t("Y 轴刻度")}<select value={chartOpts.yScale} onChange={(e) => setChartOpts({ ...chartOpts, yScale: e.target.value as 'linear' | 'log2' | 'log10', yBreak: e.target.value === 'linear' ? chartOpts.yBreak : null })}>
+                <option value="linear">{t("线性")}</option>
                 <option value="log2">log2</option>
                 <option value="log10">log10</option>
               </select>
             </label>
             <label>
-              显著性标注
-              <select value={chartOpts.showP} onChange={(e) => setChartOpts({ ...chartOpts, showP: e.target.value as 'stars' | 'p' | 'both' | 'none' })}>
-                <option value="stars">星号（*/**/***）</option>
-                <option value="p">p 值</option>
-                <option value="both">星号 + p 值</option>
-                <option value="none">不显示</option>
+              {t("显著性标注")}<select value={chartOpts.showP} onChange={(e) => setChartOpts({ ...chartOpts, showP: e.target.value as 'stars' | 'p' | 'both' | 'none' })}>
+                <option value="stars">{t("星号（*/**/***）")}</option>
+                <option value="p">{t("p 值")}</option>
+                <option value="both">{t("星号 + p 值")}</option>
+                <option value="none">{t("不显示")}</option>
               </select>
             </label>
             <label>
-              对照柱颜色
-              <input type="color" value={chartOpts.controlColor} onChange={(e) => setChartOpts({ ...chartOpts, controlColor: e.target.value })} />
+              {t("对照柱颜色")}<input type="color" value={chartOpts.controlColor} onChange={(e) => setChartOpts({ ...chartOpts, controlColor: e.target.value })} />
             </label>
             <label>
-              处理柱颜色
-              <input type="color" value={chartOpts.groupColor} onChange={(e) => setChartOpts({ ...chartOpts, groupColor: e.target.value })} />
+              {t("处理柱颜色")}<input type="color" value={chartOpts.groupColor} onChange={(e) => setChartOpts({ ...chartOpts, groupColor: e.target.value })} />
             </label>
             <label>
-              图表字体
-              <select value={chartOpts.fontFamily} onChange={(e) => setChartOpts({ ...chartOpts, fontFamily: e.target.value as ChartOptions['fontFamily'] })}>
-                <option value="sans-serif">默认无衬线</option>
+              {t("图表字体")}<select value={chartOpts.fontFamily} onChange={(e) => setChartOpts({ ...chartOpts, fontFamily: e.target.value as ChartOptions['fontFamily'] })}>
+                <option value="sans-serif">{t("默认无衬线")}</option>
                 <option value="Times New Roman">Times New Roman</option>
                 <option value="Arial">Arial</option>
               </select>
             </label>
             <label>
-              字号（px）
-              <ChartNumberInput min={8} max={28} value={chartOpts.fontSize} onValueChange={(fontSize) => setChartOpts({ ...chartOpts, fontSize })} />
+              {t("字号（px）")}<ChartNumberInput min={8} max={28} value={chartOpts.fontSize} onValueChange={(fontSize) => setChartOpts({ ...chartOpts, fontSize })} />
             </label>
             <label>
-              组内总宽度（%）
-              <ChartNumberInput min={20} max={100} step={5} value={Math.round(chartOpts.groupWidth * 100)} onValueChange={(value) => setChartOpts({ ...chartOpts, groupWidth: value / 100 })} />
+              {t("组内总宽度（%）")}<ChartNumberInput min={20} max={100} step={5} value={Math.round(chartOpts.groupWidth * 100)} onValueChange={(value) => setChartOpts({ ...chartOpts, groupWidth: value / 100 })} />
             </label>
             <label>
-              图例位置
-              <select value={chartOpts.legendPosition} disabled={segments.filter((segment) => segment.bars.length > 0).length < 2} onChange={(e) => setChartOpts({ ...chartOpts, legendPosition: e.target.value as ChartOptions['legendPosition'] })}>
-                <option value="right">右侧</option>
-                <option value="top">上方</option>
-                <option value="bottom">下方</option>
-                <option value="left">左侧</option>
-                <option value="none">隐藏</option>
+              {t("图例位置")}<select value={chartOpts.legendPosition} disabled={segments.filter((segment) => segment.bars.length > 0).length < 2} onChange={(e) => setChartOpts({ ...chartOpts, legendPosition: e.target.value as ChartOptions['legendPosition'] })}>
+                <option value="right">{t("右侧")}</option>
+                <option value="top">{t("上方")}</option>
+                <option value="bottom">{t("下方")}</option>
+                <option value="left">{t("左侧")}</option>
+                <option value="none">{t("隐藏")}</option>
               </select>
             </label>
             <label>
-              图片比例
-              <select value={aspectRatio} onChange={(e) => { setAspectRatio(e.target.value); resizeChart('width', chartOpts.width, e.target.value); }}>
-                <option value="custom">自由设置</option>
-                <option value="1:1">1:1 · 正方形</option>
-                <option value="4:3">4:3 · 横图</option>
-                <option value="3:2">3:2 · 横图</option>
-                <option value="16:9">16:9 · 宽图</option>
-                <option value="3:4">3:4 · 竖图</option>
+              {t("图片比例")}<select value={aspectRatio} onChange={(e) => { setAspectRatio(e.target.value); resizeChart('width', chartOpts.width, e.target.value); }}>
+                <option value="custom">{t("自由设置")}</option>
+                <option value="1:1">{t("1:1 · 正方形")}</option>
+                <option value="4:3">{t("4:3 · 横图")}</option>
+                <option value="3:2">{t("3:2 · 横图")}</option>
+                <option value="16:9">{t("16:9 · 宽图")}</option>
+                <option value="3:4">{t("3:4 · 竖图")}</option>
               </select>
             </label>
             <label>
-              整体缩放（%）
-              <ChartNumberInput min={50} max={200} step={10} value={Math.round(chartOpts.imageScale * 100)} onValueChange={(value) => setChartOpts({ ...chartOpts, imageScale: value / 100 })} />
+              {t("整体缩放（%）")}<ChartNumberInput min={50} max={200} step={10} value={Math.round(chartOpts.imageScale * 100)} onValueChange={(value) => setChartOpts({ ...chartOpts, imageScale: value / 100 })} />
             </label>
             <label>
-              图宽（px）
-              <ChartNumberInput min={400} max={2400} value={chartOpts.width} onValueChange={(value) => resizeChart('width', value)} />
+              {t("图宽（px）")}<ChartNumberInput min={400} max={2400} value={chartOpts.width} onValueChange={(value) => resizeChart('width', value)} />
             </label>
             <label>
-              图高（px）
-              <ChartNumberInput min={260} max={1600} value={chartOpts.height} onValueChange={(value) => resizeChart('height', value)} />
+              {t("图高（px）")}<ChartNumberInput min={260} max={1600} value={chartOpts.height} onValueChange={(value) => resizeChart('height', value)} />
             </label>
           </div>
-          <p className="chart-setting-hint">组内总宽度控制柱簇占每个基因位置的比例。选定图片比例后，宽高同步变化；整体缩放同时缩放字体和线条。单基因不显示图例。</p>
+          <p className="chart-setting-hint">{t("组内总宽度控制柱簇占每个基因位置的比例。选定图片比例后，宽高同步变化；整体缩放同时缩放字体和线条。单基因不显示图例。")}</p>
           <div className="chart-break-settings">
             <label className="chart-break-toggle">
               <input type="checkbox" checked={!!chartOpts.yBreak} disabled={chartOpts.yScale !== 'linear'} onChange={(e) => e.target.checked ? recommendBreak() : setChartOpts({ ...chartOpts, yBreak: null })} />
-              启用 Y 轴断轴
-            </label>
-            <p className="chart-setting-hint">省略中间一段数值，同时保留高柱顶部和误差棒。仅适用于线性刻度。</p>
+              {t("启用 Y 轴断轴")}</label>
+            <p className="chart-setting-hint">{t("省略中间一段数值，同时保留高柱顶部和误差棒。仅适用于线性刻度。")}</p>
             {chartOpts.yBreak && (
               <>
                 <div className="chart-settings-grid">
                   <label>
-                    省略区间起点
-                    <input type="number" step="any" value={chartOpts.yBreak.bottomMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomMax: Number(e.target.value) } })} />
+                    {t("省略区间起点")}<input type="number" step="any" value={chartOpts.yBreak.bottomMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomMax: Number(e.target.value) } })} />
                   </label>
                   <label>
-                    省略区间终点
-                    <input type="number" step="any" value={chartOpts.yBreak.topMin} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMin: Number(e.target.value) } })} />
+                    {t("省略区间终点")}<input type="number" step="any" value={chartOpts.yBreak.topMin} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMin: Number(e.target.value) } })} />
                   </label>
                   <label>
-                    上段上限
-                    <input type="number" step="any" value={chartOpts.yBreak.topMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMax: Number(e.target.value) } })} />
+                    {t("上段上限")}<input type="number" step="any" value={chartOpts.yBreak.topMax} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, topMax: Number(e.target.value) } })} />
                   </label>
                   <label>
-                    下段高度占比（%）
-                    <input type="number" min={10} max={90} step={5} value={chartOpts.yBreak.bottomPct} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomPct: Number(e.target.value) } })} />
+                    {t("下段高度占比（%）")}<input type="number" min={10} max={90} step={5} value={chartOpts.yBreak.bottomPct} onChange={(e) => setChartOpts({ ...chartOpts, yBreak: { ...chartOpts.yBreak!, bottomPct: Number(e.target.value) } })} />
                   </label>
                 </div>
                 <div className="chart-break-summary">
-                  <button type="button" onClick={recommendBreak}>按数据推荐断轴</button>
-                  {!breakError && <span>显示 {chartOpts.yMin ?? 0}–{chartOpts.yBreak.bottomMax} 和 {chartOpts.yBreak.topMin}–{chartOpts.yBreak.topMax}；中间区间省略。</span>}
+                  <button type="button" onClick={recommendBreak}>{t("按数据推荐断轴")}</button>
+                  {!breakError && <span>{t("显示")}{' '}{chartOpts.yMin ?? 0}–{chartOpts.yBreak.bottomMax} {' '}{t("和")}{' '}{chartOpts.yBreak.topMin}–{chartOpts.yBreak.topMax}{t("；中间区间省略。")}</span>}
                 </div>
-                {breakError && <p role="alert" className="chart-setting-error">{breakError} 修正后可导出；当前预览暂用连续坐标轴。</p>}
-                {!!omittedEndpoints && <p className="chart-setting-hint">有柱顶或误差棒端点落在省略区间内；可调整区间，或点击「按数据推荐断轴」完整显示这些端点。</p>}
+                {breakError && <p role="alert" className="chart-setting-error">{t(breakError ?? "")} {' '}{t("修正后可导出；当前预览暂用连续坐标轴。")}</p>}
+                {!!omittedEndpoints && <p className="chart-setting-hint">{t("有柱顶或误差棒端点落在省略区间内；可调整区间，或点击「按数据推荐断轴」完整显示这些端点。")}</p>}
               </>
             )}
           </div>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 10, fontSize: '0.88rem' }}>
             <input type="checkbox" checked={multiGene} onChange={(e) => setMultiGene(e.target.checked)} />
-            合并多基因作图（分段柱状图：每基因一段，段内为各样本 vs 对照）
-          </label>
+            {t("合并多基因作图（分段柱状图：每基因一段，段内为各样本 vs 对照）")}</label>
           {multiGene && (
             <div className="gene-multiselect">
-              <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>入图基因：</span>
+              <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>{t("入图基因：")}</span>
               {genes.map((g) => (
                 <label key={g} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 12, fontSize: '0.85rem' }}>
                   <input
@@ -504,7 +475,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
           )}
           <div className="gene-multiselect" style={{ marginTop: 10 }}>
             <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>
-              {segments.length > 1 ? '组别名称修改（图例显示名）：' : '名称修改（柱子下方显示名）：'}
+              {segments.length > 1 ? t("组别名称修改（图例显示名）：") : t("名称修改（柱子下方显示名）：")}
             </span>
             {chartSamples.map((s) => (
               <span key={s} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 10 }}>
@@ -524,7 +495,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
                       setChartOpts({ ...chartOpts, labelOverrides: next });
                     }
                   }}
-                  aria-label={'修改 ' + s + ' 的显示名'}
+                  aria-label={t("修改 ") + s + t(" 的显示名")}
                 />
                 {sampleGroup.get(s) && (
                   <span style={{ fontSize: '0.76rem', color: 'var(--muted-text)' }}>{sampleGroup.get(s)}</span>
@@ -534,7 +505,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
           </div>
           {multiGene && (
             <div className="gene-multiselect" style={{ marginTop: 10 }}>
-              <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>基因名称修改（段下方显示名）：</span>
+              <span style={{ fontSize: '0.84rem', color: 'var(--muted-text)' }}>{t("基因名称修改（段下方显示名）：")}</span>
               {genes.map((g) => (
                 <span key={g} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 10 }}>
                   <input
@@ -553,7 +524,7 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
                         setChartOpts({ ...chartOpts, geneLabelOverrides: next });
                       }
                     }}
-                    aria-label={'修改 ' + g + ' 的显示名'}
+                    aria-label={t("修改 ") + g + t(" 的显示名")}
                   />
                 </span>
               ))}
@@ -571,12 +542,11 @@ export default function ResultsPanel({ out, fileName, rows, flags, autoReport, g
         )}
 
         <div className="row-actions">
-          <button disabled={!!breakError} onClick={() => downloadSvg(svgString, baseName() + '.svg')}>导出 SVG（矢量）</button>
+          <button disabled={!!breakError} onClick={() => downloadSvg(svgString, baseName() + '.svg')}>{t("导出 SVG（矢量）")}</button>
           <button className="primary" disabled={!!breakError} onClick={exportPng}>
-            导出 PNG
-          </button>
+            {t("导出 PNG")}</button>
           <span style={{ flex: 1 }} />
-          <button onClick={exportPrism}>导出 Prism 工程（.pzfx）</button>
+          <button onClick={exportPrism}>{t("导出 Prism 工程（.pzfx）")}</button>
         </div>
       </div>
     </div>

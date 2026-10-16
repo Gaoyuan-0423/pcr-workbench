@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import { useRef, useState } from 'react';
 import type { FileMatrixInput } from '../core/merge';
 import { readInputFile, sheetToRawMatrix, summarizeSheet, type WorkbookFile } from '../core/parse';
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Props) {
+  const { t } = useI18n();
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -74,13 +76,13 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
 
   return (
     <div className="card import-card">
-      <div className="import-heading"><div><h2>导入仪器下机结果</h2><p className="hint-line">上传导出文件，自动识别列名、孔位和数据。支持单板，也支持多板合并。</p></div><span className="format-badge">Excel / CSV / RDML</span></div>
+      <div className="import-heading"><div><h2>{t("导入仪器下机结果")}</h2><p className="hint-line">{t("上传导出文件，自动识别列名、孔位和数据。支持单板，也支持多板合并。")}</p></div><span className="format-badge">Excel / CSV / RDML</span></div>
       <div className="import-layout"><div className="import-main">
       <div
         className={`upload-area${dragOver ? ' dragover' : ''}`}
         role="button"
         tabIndex={0}
-        aria-label="选择仪器结果文件"
+        aria-label={t("选择仪器结果文件")}
         onClick={() => inputRef.current?.click()}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -100,14 +102,14 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
         }}
       >
         <span className="upload-icon"><UiIcon name="upload" /></span>
-        <div className="big">拖入文件，或点击选择</div>
+        <div className="big">{t("拖入文件，或点击选择")}</div>
         <div className="formats">.xlsx · .xls · .csv · .tsv · .txt · .rdml</div>
-        <span className="upload-select">选择文件<UiIcon name="arrow" /></span>
-        <small>可一次选择多个文件，合并同一实验的多块板</small>
+        <span className="upload-select">{t("选择文件")}<UiIcon name="arrow" /></span>
+        <small>{t("可一次选择多个文件，合并同一实验的多块板")}</small>
       </div>
-      <p className="instrument-note">支持 Bio-Rad CFX、QuantStudio / StepOne、LightCycler、Rotor-Gene 等仪器导出，中英文列名与 UTF-8 / GBK 编码自动识别。</p>
-      </div><aside className="import-shortcuts" aria-label="快速开始">
-      <div className="auto-analysis-intro"><span className="shortcut-icon"><UiIcon name="sparkles" /></span><h3>快速开始</h3><p>自动识别列、对照组与内参，直接查看结果和质量报告。</p></div>
+      <p className="instrument-note">{t("支持 Bio-Rad CFX、QuantStudio / StepOne、LightCycler、Rotor-Gene 等仪器导出，中英文列名与 UTF-8 / GBK 编码自动识别。")}</p>
+      </div><aside className="import-shortcuts" aria-label={t("快速开始")}>
+      <div className="auto-analysis-intro"><span className="shortcut-icon"><UiIcon name="sparkles" /></span><h3>{t("快速开始")}</h3><p>{t("自动识别列、对照组与内参，直接查看结果和质量报告。")}</p></div>
       <div className="row-actions auto-analysis-action">
         <button
           className="primary"
@@ -117,16 +119,16 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
             inputRef.current?.click();
           }}
         >
-          <UiIcon name="sparkles" />一键智能分析<UiIcon name="arrow" />
+          <UiIcon name="sparkles" />{t("一键智能分析")}<UiIcon name="arrow" />
         </button>
       </div>
       <div className="demo-row">
-        <span className="demo-caption">没有文件？用示例体验完整流程</span>
+        <span className="demo-caption">{t("没有文件？用示例体验完整流程")}</span>
         {(
           [
-            ['cfx-style.csv', 'CFX 示例'],
-            ['quantstudio-style.txt', 'QuantStudio 示例'],
-            ['standard-curve-style.csv', '标准曲线示例'],
+            ['cfx-style.csv', t("CFX 示例")],
+            ['quantstudio-style.txt', t("QuantStudio 示例")],
+            ['standard-curve-style.csv', t("标准曲线示例")],
           ] as const
         ).map(([file, label]) => (
           <button
@@ -149,7 +151,7 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
               })();
             }}
           >
-            {demoBusy === file ? '加载中…' : label}
+            {demoBusy === file ? t("加载中…") : label}
             <UiIcon name="arrow" />
           </button>
         ))}
@@ -160,24 +162,25 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
         type="file"
         accept=".xlsx,.xls,.xlsm,.csv,.tsv,.txt,.rdml"
         hidden
+        aria-label={t("选择仪器结果文件")}
         multiple
         onChange={(e) => {
           void handleFiles(Array.from(e.target.files ?? []));
           e.target.value = '';
         }}
       />
-      {busy && <div className="parsing">正在解析…</div>}
+      {busy && <div className="parsing">{t("正在解析…")}</div>}
       {error && (
         <p role="alert" style={{ color: 'var(--danger)', marginTop: 10 }}>
-          {error}
+          {t(error)}
         </p>
       )}
 
       {pending && (
-        <div className="modal-overlay" role="dialog" aria-label="选择工作表">
+        <div className="modal-overlay" role="dialog" aria-label={t("选择工作表")}>
           <div className="modal">
-            <h3>选择工作表</h3>
-            <p className="hint-line">{pending.fileName} 里有 {pending.sheetNames.length} 个工作表：</p>
+            <h3>{t("选择工作表")}</h3>
+            <p className="hint-line">{t('{0} 里有 {1} 个工作表：', [pending.fileName, pending.sheetNames.length])}</p>
             <div className="sheet-list">
               {pending.sheetNames.map((name) => {
                 const s = summarizeSheet(pending.wb, name);
@@ -196,14 +199,14 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
                     <div style={{ flex: 1 }}>
                       <div>📄 {name}</div>
                       <div className="meta">
-                        {s.rowCount} 行数据 · {s.columnCount} 列 · 列名：{s.headers.slice(0, 6).join(', ') || '—'}
+                        {s.rowCount} {' '}{t("行数据 ·")}{' '}{s.columnCount} {' '}{t("列 · 列名：")}{s.headers.slice(0, 6).join(', ') || '—'}
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <button onClick={() => setPending(null)}>取消</button>
+            <button onClick={() => setPending(null)}>{t("取消")}</button>
           </div>
         </div>
       )}

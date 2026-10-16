@@ -1,3 +1,4 @@
+import { translate, type Language } from '../i18n/translate';
 // AI 解读（BYOK）：用户配置自己的 LLM API（OpenAI 兼容 chat/completions），
 // 一键分析的结构化结果发给用户自己的端点生成自然语言解读。
 // 配置仅存本机（localStorage，可选），不经过任何第三方服务器。
@@ -69,24 +70,25 @@ export function clearAiConfig(): void {
 }
 
 /** 组装发给模型的解读请求消息。 */
-export function buildInterpretMessages(payload: unknown): { role: 'system' | 'user'; content: string }[] {
+export function buildInterpretMessages(payload: unknown, language: Language = 'zh'): { role: 'system' | 'user'; content: string }[] {
+  const t = (message: string) => translate(message, language) + (language === 'en' ? ' ' : '');
   return [
     {
       role: 'system',
       content:
-        '你是一位 qPCR 实验分析专家。用户会给你一份 ΔΔCt 分析的结构化结果（JSON）。' +
-        '请用中文、面向实验人员写一份简明解读，要求：' +
-        '1) 先用两三句话概括实验结论（哪些基因在哪些处理下上调/下调、是否显著）；' +
-        '2) 逐条解读质量报告中的问题（严重/警告），说明其对结果可信度的影响；' +
-        '3) 给出下一步实验或分析建议。' +
-        '用 markdown 小标题组织，总长不超过 500 字。不要复述原始数字表格，只提炼关键结论。',
+        t('你是一位 qPCR 实验分析专家。用户会给你一份 ΔΔCt 分析的结构化结果（JSON）。') +
+        t('请用中文、面向实验人员写一份简明解读，要求：') +
+        t('1) 先用两三句话概括实验结论（哪些基因在哪些处理下上调/下调、是否显著）；') +
+        t('2) 逐条解读质量报告中的问题（严重/警告），说明其对结果可信度的影响；') +
+        t('3) 给出下一步实验或分析建议。') +
+        t('用 markdown 小标题组织，总长不超过 500 字。不要复述原始数字表格，只提炼关键结论。'),
     },
     { role: 'user', content: JSON.stringify(payload) },
   ];
 }
 
 /** 调用用户自己的 chat/completions 端点，返回解读文本。 */
-export async function aiInterpret(config: AiConfig, payload: unknown, signal?: AbortSignal): Promise<string> {
+export async function aiInterpret(config: AiConfig, payload: unknown, signal?: AbortSignal, language: Language = 'zh'): Promise<string> {
   const res = await fetch(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -95,7 +97,7 @@ export async function aiInterpret(config: AiConfig, payload: unknown, signal?: A
     },
     body: JSON.stringify({
       model: config.model,
-      messages: buildInterpretMessages(payload),
+      messages: buildInterpretMessages(payload, language),
       temperature: 0.3,
     }),
     signal,

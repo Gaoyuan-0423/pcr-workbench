@@ -403,3 +403,20 @@ td.well.ntc .wellname { color: #8a9aa3; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Shared WispLab locale control; never competes with the analysis workflow. */
+.suite-bar-inner { flex-wrap: wrap; }
+.language-switch { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 9px; background: #f7f8fc; flex: 0 0 auto; }
+.language-switch button { min-height: 30px; padding: 4px 9px; border: 0; border-radius: 6px; background: transparent; box-shadow: none; color: #667085; font-size: 12px; }
+.language-switch button[aria-pressed='true'] { background: #4f46e5; color: #fff; }
+html[lang='en'] .step-copy small { line-height: 1.4; }
+html[lang='en'] .chart-setting-field { min-width: 0; }
+@media (max-width: 600px) {
+  .suite-bar-inner { gap: 9px; }
+  .suite-brand { flex: 1 1 auto; }
+  .suite-nav { order: 2; flex: 1 0 100%; justify-content: center; }
+  .language-switch { margin-left: auto; }
+  html[lang='en'] .steps { gap: 5px; }
+  html[lang='en'] .step-copy { font-size: 11px; overflow-wrap: anywhere; }
+  .project-row { flex-wrap: wrap; }
+}
