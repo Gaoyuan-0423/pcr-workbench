@@ -1,10 +1,14 @@
-// Prism (.pzfx XML) 导出：分组数据表，行=复孔，子列=样本（按基因×样本排列）。
-// Prism 打开后即为 Grouped 表，一键生成分组柱状图（用户自己的模板流程）。
+// Prism (.pzfx XML) 数据表：每基因一张 Cq 复孔表，另附 Fold Change 汇总。
+// Structure follows GraphPad's published Prism XML schema (FAQ 1638).
 
 import type { SampleTargetResult } from './types';
 
 const esc = (s: string): string =>
-  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  Array.from(String(s ?? '')).filter((character) => {
+    const code = character.codePointAt(0)!;
+    return code === 9 || code === 10 || code === 13 || (code >= 0x20 && code <= 0xd7ff)
+      || (code >= 0xe000 && code <= 0xfffd) || code >= 0x10000;
+  }).join('').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 interface PrismSubcolumn {
   title: string;
@@ -43,19 +47,20 @@ export function buildPrismPzfx(
     const subcols = cols
       .map(
         (c) =>
-          `        <Subcolumn>\n          <Title>${esc(c.title)}</Title>\n` +
+          `      <YColumn Width="100" Decimals="4" Subcolumns="1">\n        <Title>${esc(c.title)}</Title>\n        <Subcolumn>\n` +
           Array.from({ length: maxRows }, (_, i) =>
-            c.values[i] != null && Number.isFinite(c.values[i]!) ? `          <p>${c.values[i]!}</p>\n` : '          <p></p>\n',
+            c.values[i] != null && Number.isFinite(c.values[i]!) ? `          <d>${c.values[i]!}</d>\n` : '          <d></d>\n',
           ).join('') +
-          '        </Subcolumn>',
+          '        </Subcolumn>\n      </YColumn>',
       )
       .join('\n');
-    const rowTitles = Array.from({ length: maxRows }, (_, i) => `          <w:RowTitle>${i + 1}</w:RowTitle>`).join('\n');
+    // Prism stores row-title cells as unprefixed <d> elements inside Subcolumn.
+    const rowTitles = Array.from({ length: maxRows }, (_, i) => `          <d>${i + 1}</d>`).join('\n');
     tables.push(
-      `    <Table ID="Table${tableId}" XWidth="100" YWidth="100">\n` +
+      `    <Table ID="Table${tableId}" XFormat="none" YFormat="replicates" Replicates="1" TableType="OneWay">\n` +
         `      <Title>${esc(gene)} — Cq replicates</Title>\n` +
         `      <RowTitlesColumn Width="100">\n        <Subcolumn>\n${rowTitles}\n        </Subcolumn>\n      </RowTitlesColumn>\n` +
-        `      <Subcolumns>\n${subcols}\n      </Subcolumns>\n    </Table>`,
+        `${subcols}\n    </Table>`,
     );
   }
 
@@ -65,23 +70,27 @@ export function buildPrismPzfx(
   for (const gene of genes) {
     for (const r of results.filter((x) => x.target === gene)) {
       fcCols.push(
-        `        <Subcolumn>\n          <Title>${esc(r.target + ' | ' + r.sample)}</Title>\n          <p>${r.foldChange != null ? r.foldChange.toFixed(4) : ''}</p>\n          <p>${r.fcSd != null && Number.isFinite(r.fcSd) ? r.fcSd.toFixed(4) : ''}</p>\n        </Subcolumn>`,
+        `      <YColumn Width="100" Decimals="4" Subcolumns="1">\n        <Title>${esc(r.target + ' | ' + r.sample)}</Title>\n        <Subcolumn>\n          <d>${r.foldChange != null && Number.isFinite(r.foldChange) ? r.foldChange.toFixed(4) : ''}</d>\n          <d>${r.fcSd != null && Number.isFinite(r.fcSd) ? r.fcSd.toFixed(4) : ''}</d>\n        </Subcolumn>\n      </YColumn>`,
       );
     }
   }
   tables.push(
-    `    <Table ID="Table${tableId}" XWidth="100" YWidth="100">\n` +
+    `    <Table ID="Table${tableId}" XFormat="none" YFormat="replicates" Replicates="1" TableType="TwoWay">\n` +
       `      <Title>Fold Change (mean ± SD)</Title>\n` +
-      `      <RowTitlesColumn Width="100">\n        <Subcolumn>\n          <w:RowTitle>Mean</w:RowTitle>\n          <w:RowTitle>SD</w:RowTitle>\n        </Subcolumn>\n      </RowTitlesColumn>\n` +
-      `      <Subcolumns>\n${fcCols.join('\n')}\n      </Subcolumns>\n    </Table>`,
+      `      <RowTitlesColumn Width="100">\n        <Subcolumn>\n          <d>Mean</d>\n          <d>SD</d>\n        </Subcolumn>\n      </RowTitlesColumn>\n` +
+      `${fcCols.join('\n')}\n    </Table>`,
   );
 
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<GraphPadPrismFile PrismXMLVersion="5.00">\n` +
-    `  <Created>\n    <OriginalVersion Major="9" Minor="0" />\n    <LastSavedBy Major="9" Minor="0" />\n  </Created>\n` +
-    `  <!-- PCR Workbench · PCR 工作台 | 对照: ${esc(opts.controlSamples.join('、'))} | 内参: ${esc(opts.refGenes.join('、'))} -->\n` +
-    `  <TableSequence>\n${tables.join('\n')}\n  </TableSequence>\n` +
+    `<GraphPadPrismFile xmlns="http://graphpad.com/prism/Prism.htm" PrismXMLVersion="5.00">\n` +
+    `  <Created>\n    <OriginalVersion CreatedByProgram="PCR Workbench" />\n  </Created>\n` +
+    `  <InfoSequence><Ref ID="Info1" /></InfoSequence>\n` +
+    `  <Info ID="Info1">\n    <Title>${esc(opts.projectName || 'PCR Workbench')}</Title>\n` +
+    `    <Constant><Name>对照</Name><Value>${esc(opts.controlSamples.join('、'))}</Value></Constant>\n` +
+    `    <Constant><Name>内参</Name><Value>${esc(opts.refGenes.join('、'))}</Value></Constant>\n  </Info>\n` +
+    `  <TableSequence>\n${tables.map((_, i) => `    <Ref ID="Table${i + 1}" />`).join('\n')}\n  </TableSequence>\n` +
+    `${tables.join('\n')}\n` +
     `</GraphPadPrismFile>\n`
   );
 }

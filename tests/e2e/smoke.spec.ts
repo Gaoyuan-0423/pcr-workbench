@@ -249,7 +249,7 @@ test('换新表后刷新：恢复的应是新表而不是旧课题', async ({ pa
   await expect(page.getByText('ΔΔCt 结果表')).toBeVisible();
 });
 
-test('图表定制：多基因分段 + 显著性模式 + Prism 导出', async ({ page }) => {
+test('图表定制：多基因分段 + 显著性模式 + Prism 导出', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.setInputFiles('input[type=file]', fixture('cfx-style.csv'));
   await page.getByText('已解析 cfx-style.csv').waitFor({ timeout: 15_000 });
@@ -274,6 +274,31 @@ test('图表定制：多基因分段 + 显著性模式 + Prism 导出', async ({
     page.getByRole('button', { name: '导出 Prism 工程（.pzfx）' }).click(),
   ]);
   expect(download.suggestedFilename()).toContain('.pzfx');
+  const path = await download.path();
+  expect(path).not.toBeNull();
+  const xml = await readFile(path!, 'utf8');
+  await testInfo.attach('prism-export.pzfx', { body: xml, contentType: 'application/xml' });
+  // Parse the downloaded bytes: filename/string checks missed the unbound w: prefix.
+  const parsed = await page.evaluate((content) => {
+    const document = new DOMParser().parseFromString(content, 'application/xml');
+    return {
+      error: document.querySelector('parsererror')?.textContent ?? null,
+      root: document.documentElement.tagName,
+      rowTitles: Array.from(document.querySelectorAll('Table')).map((table) =>
+        Array.from(table.querySelectorAll('RowTitlesColumn > Subcolumn > d')).map((cell) => cell.textContent)),
+      tableIds: Array.from(document.querySelectorAll('GraphPadPrismFile > Table')).map((table) => table.getAttribute('ID')),
+      references: Array.from(document.querySelectorAll('TableSequence > Ref')).map((ref) => ref.getAttribute('ID')),
+      values: Array.from(document.querySelectorAll('Table > YColumn')).map((column) =>
+        Array.from(column.querySelectorAll('Subcolumn > d')).map((cell) => cell.textContent)),
+    };
+  }, xml);
+  expect(parsed.error).toBeNull();
+  expect(parsed.root).toBe('GraphPadPrismFile');
+  expect(parsed.rowTitles).toEqual([['1', '2', '3'], ['1', '2', '3'], ['Mean', 'SD']]);
+  expect(parsed.references).toEqual(parsed.tableIds);
+  expect(parsed.tableIds).toHaveLength(3);
+  expect(parsed.values).toHaveLength(20); // Ten sample/gene columns plus the same ten summary columns.
+  expect(parsed.values[0].every((value) => Number.isFinite(Number(value)))).toBe(true);
 });
 
 test('图表定制进阶：基因勾选、名称修改、log2 刻度、统计学方法脚注', async ({ page }) => {
