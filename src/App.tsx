@@ -18,6 +18,7 @@ import ResultsPanel from './ui/ResultsPanel';
 import { StepHelp } from './ui/StepHelp';
 import { AiInterpretCard } from './ui/AiInterpretCard';
 import AiSettingsDialog from './ui/AiSettingsDialog';
+import UiIcon from './ui/UiIcon';
 import { loadAiConfig, type AiConfig } from './core/ai';
 import {
   deleteProject,
@@ -50,6 +51,7 @@ interface ProjectState {
 }
 
 const STEPS = ['导入数据', '确认映射', '孔板与配置', '分析结果'];
+const STEP_NOTES = ['上传仪器导出文件', '核对自动识别的列', '检查复孔和实验设置', '查看结果与导出图表'];
 
 export default function App() {
   const [step, setStep] = useState(1);
@@ -389,24 +391,33 @@ export default function App() {
   }
 
   return (
-    <div className="container">
+    <div className="app-shell">
+      <div className="suite-bar">
+        <div className="suite-bar-inner">
+          <span className="suite-brand"><span className="suite-mark"><UiIcon name="grid" /></span>实验工作台</span>
+          <nav className="suite-nav" aria-label="实验工作台导航">
+            <a href="https://gaoyuan-0423.github.io/blot-workbench/">WB</a>
+            <a href="https://gaoyuan-0423.github.io/pathology-workbench/">病理</a>
+            <a href="https://gaoyuan-0423.github.io/pcr-workbench/" aria-current="page">PCR</a>
+          </nav>
+        </div>
+      </div>
+      <main className="container">
       <header className="app-header">
-        <h1>PCR Workbench · PCR 工作台</h1>
-        <span className="sub">qPCR 下机结果 → ΔΔCt → 图表导出</span>
-        <span className="spacer" />
-        {projectName && (
-          <span className="privacy-note" title={projectName}>
-            📁 {projectName.length > 18 ? projectName.slice(0, 18) + '…' : projectName}
-          </span>
-        )}
-        <button className="small" onClick={() => { refreshProjectList(); setShowProjects(true); }}>
-          📂 我的课题
-        </button>
-        <span className="privacy-note">🔒 数据仅在浏览器本地处理，不上传服务器</span>
-        <button className="small" style={{ marginLeft: 8 }} onClick={() => setShowAiSettings(true)}>
-          🤖 AI 设置
-        </button>
+        <div className="app-title">
+          <span className="app-eyebrow">PCR WORKBENCH</span>
+          <h1>PCR 工作台</h1>
+          <p className="sub">从仪器下机数据，到清晰的表达量结果与科研图表。</p>
+        </div>
+        <div className="header-tools">
+          <div className="header-actions">
+            <button onClick={() => { refreshProjectList(); setShowProjects(true); }}><UiIcon name="folder" />我的课题</button>
+            <button onClick={() => setShowAiSettings(true)}><UiIcon name="settings" />AI 设置</button>
+          </div>
+          <span className="privacy-note"><UiIcon name="shield" />数据在浏览器中解析与计算</span>
+        </div>
       </header>
+      {projectName && <div className="current-project"><UiIcon name="folder" /><span>当前课题</span><strong title={projectName}>{projectName}</strong></div>}
       {showProjects && (
         <ProjectsDialog
           currentId={projectId}
@@ -475,12 +486,12 @@ export default function App() {
             <button
               key={label}
               className={cls}
-              style={{ cursor: n < step ? 'pointer' : 'default', border: 'none' }}
+              style={{ cursor: n < step ? 'pointer' : 'default' }}
               onClick={() => n !== step && goto(n)}
               aria-current={n === step ? 'step' : undefined}
             >
               <span className="num">{n < step ? '✓' : n}</span>
-              {label}
+              <span className="step-copy"><span>{label}</span><small aria-hidden="true">{STEP_NOTES[i]}</small></span>
             </button>
           );
         })}
@@ -575,7 +586,7 @@ export default function App() {
         </>
       )}
 
-      <div className="row-actions" style={{ justifyContent: 'space-between', marginTop: 8 }}>
+      <div className="row-actions workflow-actions">
         <span>{step > 1 && <button onClick={() => setStep(step - 1)}>← 上一步</button>}</span>
         <span>
           {step === 2 && (
@@ -600,6 +611,8 @@ export default function App() {
           {toast}
         </div>
       )}
+      <footer className="app-footer"><span>PCR Workbench</span><span>本地分析 · 课题自动保存 · 结果随时导出</span></footer>
+      </main>
     </div>
   );
 }

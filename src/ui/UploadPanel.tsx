@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { FileMatrixInput } from '../core/merge';
 import { readInputFile, sheetToRawMatrix, summarizeSheet, type WorkbookFile } from '../core/parse';
+import UiIcon from './UiIcon';
 
 interface Props {
   onLoaded: (fileName: string, sheetName: string, matrix: string[][]) => void;
@@ -72,16 +73,21 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
   }
 
   return (
-    <div className="card">
-      <h2>导入仪器下机结果</h2>
-      <p className="hint-line">
-        支持 Bio-Rad CFX、Thermo QuantStudio/StepOne、Roche LightCycler、Qiagen Rotor-Gene
-        等仪器软件导出的表格文件（Excel / CSV / TSV / TXT，中英文列名均可，UTF-8 与 GBK
-        编码自动识别）。文件只在浏览器本地解析，不会上传。
-      </p>
+    <div className="card import-card">
+      <div className="import-heading"><div><h2>导入仪器下机结果</h2><p className="hint-line">上传导出文件，自动识别列名、孔位和数据。支持单板，也支持多板合并。</p></div><span className="format-badge">Excel / CSV / RDML</span></div>
+      <div className="import-layout"><div className="import-main">
       <div
         className={`upload-area${dragOver ? ' dragover' : ''}`}
+        role="button"
+        tabIndex={0}
+        aria-label="选择仪器结果文件"
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -93,24 +99,29 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
           void handleFiles(Array.from(e.dataTransfer.files));
         }}
       >
-        <div style={{ fontSize: 34 }}>🧬</div>
+        <span className="upload-icon"><UiIcon name="upload" /></span>
         <div className="big">拖入文件，或点击选择</div>
-        <div className="formats">.xlsx / .xls / .csv / .tsv / .txt / .rdml · 可同时拖入多块板合并分析</div>
+        <div className="formats">.xlsx · .xls · .csv · .tsv · .txt · .rdml</div>
+        <span className="upload-select">选择文件<UiIcon name="arrow" /></span>
+        <small>可一次选择多个文件，合并同一实验的多块板</small>
       </div>
-      <div className="row-actions" style={{ justifyContent: 'center' }}>
+      <p className="instrument-note">支持 Bio-Rad CFX、QuantStudio / StepOne、LightCycler、Rotor-Gene 等仪器导出，中英文列名与 UTF-8 / GBK 编码自动识别。</p>
+      </div><aside className="import-shortcuts" aria-label="快速开始">
+      <div className="auto-analysis-intro"><span className="shortcut-icon"><UiIcon name="sparkles" /></span><h3>快速开始</h3><p>自动识别列、对照组与内参，直接查看结果和质量报告。</p></div>
+      <div className="row-actions auto-analysis-action">
         <button
-          className={autoMode ? 'primary' : ''}
+          className="primary"
           disabled={busy}
           onClick={() => {
             setAutoMode(true);
             inputRef.current?.click();
           }}
         >
-          🪄 一键智能分析：自动识别列 / 对照组 / 内参，直接出结果与质量报告
+          <UiIcon name="sparkles" />一键智能分析<UiIcon name="arrow" />
         </button>
       </div>
       <div className="demo-row">
-        <span style={{ color: 'var(--muted-text)', fontSize: '0.85rem' }}>没有文件？试试示例数据（一键分析）：</span>
+        <span className="demo-caption">没有文件？用示例体验完整流程</span>
         {(
           [
             ['cfx-style.csv', 'CFX 示例'],
@@ -139,9 +150,11 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
             }}
           >
             {demoBusy === file ? '加载中…' : label}
+            <UiIcon name="arrow" />
           </button>
         ))}
       </div>
+      </aside></div>
       <input
         ref={inputRef}
         type="file"
