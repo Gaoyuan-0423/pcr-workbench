@@ -161,4 +161,27 @@ describe('Dunnett 校正 p', () => {
     expect(ps[0]).toBeGreaterThan(ps[1]);
     expect(ps[1]).toBeLessThan(0.1);
   });
+  it('深尾部（|t|≈30–60）校正 p 不得低于对应未校正 p（真实数据回归）', () => {
+    // 数据取自 tests/fixtures/real/RELATIVE_example.csv 的 ANOVA+Dunnett 路径；
+    // 修复前分位数坐标 40 节点漏掉边界层，此处曾输出 6.9e-13（正确量级 ≈3e-6）。
+    const b = Math.sqrt(3 / 6);
+    const comps = [
+      { b, tAbs: 43.89472458428537 },
+      { b, tAbs: 33.05605716794532 },
+    ];
+    const raw1 = 2 * (1 - studentTCdf(comps[0].tAbs, 4));
+    const [p1] = dunnettAdjustedP(comps, 4);
+    expect(p1).toBeGreaterThanOrEqual(raw1);
+    expect(p1).toBeLessThanOrEqual(raw1 * comps.length * 1.01);
+    expect(p1).toBeGreaterThan(1.5e-6);
+    expect(p1).toBeLessThan(3.4e-6);
+    const compsG = [
+      { b, tAbs: 50.423130755476315 },
+      { b, tAbs: 37.06751312144091 },
+    ];
+    const rawG = 2 * (1 - studentTCdf(compsG[0].tAbs, 4));
+    const [pG1] = dunnettAdjustedP(compsG, 4);
+    expect(pG1).toBeGreaterThanOrEqual(rawG);
+    expect(pG1).toBeLessThanOrEqual(rawG * compsG.length * 1.01);
+  });
 });

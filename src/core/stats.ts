@@ -280,12 +280,24 @@ export function gaussLegendre(n: number, a: number, b: number): GLNode[] {
 }
 
 const GL_N_U = gaussLegendre(40, -9, 9); // 对照组潜变量
-const GL_N_S = gaussLegendre(40, 0, 1); // 卡方分位数坐标
+// 内层在 χ² 变量 v 域分面板求积：S = σ·√(v/ν)，权重含 χ² 密度 v^{ν/2−1}e^{−v/2}，被积函数在 v 域光滑。
+// 分位数坐标在 |t| 大时于 q≈0 处出现宽度 O(1/t) 的边界层，固定节点会整体漏掉，
+// 使深尾部校正 p 偏小可达 6 个数量级以上（真实数据实测），故弃用；
+// v 域积分上限随 |t| 自适应收紧到尾概率亏缺 ≤ 2Φ(−8) 处，面板始终对准有效支撑区。
+const GL_V_PANELS = 40;
+const GL_N_V = gaussLegendre(16, -1, 1);
+
+/** 卡方密度（Dunnett 内层积分的变量替换权重）。 */
+function chiSquarePdf(v: number, df: number): number {
+  if (v <= 0) return 0;
+  return Math.exp((df / 2 - 1) * Math.log(v) - v / 2 - (df / 2) * Math.LN2 - lgamma(df / 2));
+}
 
 /**
  * Dunnett 校正 p 值（双侧，共用对照组）。
  * 输入每个处理组 vs 对照组的 |t| 与 b_j = sqrt(n_j / n_0)，以及混合自由度 df。
  * 通过二元高斯求积对多元 t 的最大绝对值分布积分（Dunnett 1955/1989 的单因子结构）。
+ * 直接积分尾概率（而非 1 − 通过概率），避免深尾部 p ≪ 1 时的减法精度损失。
  */
 export function dunnettAdjustedP(
   comparisons: { b: number; tAbs: number }[],
@@ -294,15 +306,28 @@ export function dunnettAdjustedP(
   const k = comparisons.length;
   if (k === 0 || df <= 0) return comparisons.map(() => NaN);
   const out: number[] = new Array(k).fill(0);
-  // S = σ·√(χ²_ν/ν) 服从 χ 分布：按分位数坐标预积分离散化
-  const sNodes = GL_N_S.map((ns) => ({ w: ns.w, s: Math.sqrt(chiSquareQuantile(ns.x, df) / df) }));
+  const bMax = Math.max(...comparisons.map((cmp) => cmp.b));
   for (let i = 0; i < k; i++) {
     const c = comparisons[i].tAbs;
     if (!Number.isFinite(c)) {
       out[i] = NaN;
       continue;
     }
-    let acc = 0;
+    // 截断点：v 超过它时任何 u∈[−9,9] 下窗口亏缺 ≤ 2Φ(−8)，对尾概率的贡献可忽略
+    const rMin = Math.min(...comparisons.map((cmp) => Math.sqrt(1 + cmp.b * cmp.b)));
+    const sCut = (8 + bMax * 9) / (c * rMin);
+    const vCut = Math.max(df * sCut * sCut, df);
+    const step = vCut / GL_V_PANELS;
+    const half = step / 2;
+    const sNodes: { s: number; w: number }[] = [];
+    for (let p = 0; p < GL_V_PANELS; p++) {
+      const lo = p * step;
+      for (const nd of GL_N_V) {
+        const v = lo + half * (nd.x + 1);
+        sNodes.push({ s: Math.sqrt(v / df), w: half * nd.w * chiSquarePdf(v, df) });
+      }
+    }
+    let tail = 0;
     for (const nu of GL_N_U) {
       let inner = 0;
       for (const ns of sNodes) {
@@ -316,11 +341,11 @@ export function dunnettAdjustedP(
           prod *= normalCdf(a + off) - normalCdf(-a + off);
           if (prod === 0) break;
         }
-        inner += ns.w * prod;
+        inner += ns.w * (1 - prod);
       }
-      acc += nu.w * normalPdf(nu.x) * inner;
+      tail += nu.w * normalPdf(nu.x) * inner;
     }
-    out[i] = Math.min(1, Math.max(0, 1 - acc));
+    out[i] = Math.min(1, Math.max(0, tail));
   }
   return out;
 }
