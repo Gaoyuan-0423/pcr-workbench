@@ -1,5 +1,11 @@
 // Chinese source messages are stable translation keys. Values never replace user data.
 export const messages: Record<string, string> = {
+  "打开此版本会替换当前工作内容，是否继续？": "Opening this version replaces the current workspace. Continue?",
+  "已取消打开项目": "Opening the project was cancelled",
+  "项目已恢复；历史缺失附件不会自动补全。": "Project restored; missing historical attachments are not recreated.",
+  "项目完整性说明": "Project completeness",
+  "请等待当前导入完成": "Wait for the current import to finish",
+  "WispLab实验数据分析平台": "WispLab Experimental Data Analysis Platform",
   "相对表达量图": "Relative expression chart",
   "无严重问题，{0} 个警告值得关注": "No errors; warnings to review: {0}",
   "导入数据": "Import data",

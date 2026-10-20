@@ -1,16 +1,17 @@
 import { useI18n } from '../i18n';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FileMatrixInput } from '../core/merge';
 import { readInputFile, sheetToRawMatrix, summarizeSheet, type WorkbookFile } from '../core/parse';
 import UiIcon from './UiIcon';
 
 interface Props {
-  onLoaded: (fileName: string, sheetName: string, matrix: string[][]) => void;
+  onBusyChange?: (busy: boolean) => void;
+  onLoaded: (fileName: string, sheetName: string, matrix: string[][], file: File) => void;
   onAutoFile: (file: File) => Promise<void>;
-  onMergeLoaded: (inputs: FileMatrixInput[]) => void;
+  onMergeLoaded: (inputs: FileMatrixInput[], files: File[]) => void;
 }
 
-export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Props) {
+export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded, onBusyChange }: Props) {
   const { t } = useI18n();
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -18,7 +19,10 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
   const [demoBusy, setDemoBusy] = useState('');
   const [pending, setPending] = useState<WorkbookFile | null>(null);
   const [autoMode, setAutoMode] = useState(false);
+  const pendingFile = useRef<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { onBusyChange?.(busy || !!pending || !!demoBusy); return () => onBusyChange?.(false); }, [busy, pending, demoBusy, onBusyChange]);
 
   async function handleFiles(files: File[]) {
     setError('');
@@ -45,7 +49,7 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
           setError('文件里没有可读的数据行');
           return;
         }
-        onMergeLoaded(inputs);
+        onMergeLoaded(inputs, files);
         return;
       }
       const file = files[0];
@@ -55,15 +59,16 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
       }
       const parsed = await readInputFile(file);
       if (parsed.kind === 'rdml') {
-        onLoaded(file.name, 'RDML', parsed.matrix);
+        onLoaded(file.name, 'RDML', parsed.matrix, file);
         return;
       }
       const nonEmpty = parsed.sheetNames.filter((n) => summarizeSheet(parsed.wb, n).rowCount > 0);
       if (nonEmpty.length === 0) {
         setError('文件里没有可读的数据行');
       } else if (nonEmpty.length === 1) {
-        onLoaded(file.name, nonEmpty[0], sheetToRawMatrix(parsed.wb, nonEmpty[0]));
+        onLoaded(file.name, nonEmpty[0], sheetToRawMatrix(parsed.wb, nonEmpty[0]), file);
       } else {
+        pendingFile.current = file;
         setPending(parsed);
       }
     } catch (e) {
@@ -193,7 +198,8 @@ export default function UploadPanel({ onLoaded, onAutoFile, onMergeLoaded }: Pro
                       if (s.rowCount === 0) return;
                       const wbFile = pending;
                       setPending(null);
-                      onLoaded(wbFile.fileName, name, sheetToRawMatrix(wbFile.wb, name));
+                      if (pendingFile.current) onLoaded(wbFile.fileName, name, sheetToRawMatrix(wbFile.wb, name), pendingFile.current);
+                      pendingFile.current = null;
                     }}
                   >
                     <div style={{ flex: 1 }}>
