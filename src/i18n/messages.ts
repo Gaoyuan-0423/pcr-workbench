@@ -5,7 +5,7 @@ export const messages: Record<string, string> = {
   "项目已恢复；历史缺失附件不会自动补全。": "Project restored; missing historical attachments are not recreated.",
   "项目完整性说明": "Project completeness",
   "请等待当前导入完成": "Wait for the current import to finish",
-  "WispLab实验数据分析平台": "WispLab Experimental Data Analysis Platform",
+  "WispLab实验数据分析": "WispLab Experimental Data Analysis",
   "相对表达量图": "Relative expression chart",
   "无严重问题，{0} 个警告值得关注": "No errors; warnings to review: {0}",
   "导入数据": "Import data",
