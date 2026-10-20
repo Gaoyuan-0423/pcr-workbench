@@ -1,3 +1,5 @@
+import { connectProjectAdapter, decodeJson, encodeJson } from './project-archive';
+import { exportPcrProject, importPcrProject, recoverLegacyNumbers, type PcrProjectState as ProjectState } from './project-io';
 import { LanguageSwitch, withLanguage, useI18n } from './i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { del, get, set } from 'idb-keyval';
@@ -36,27 +38,15 @@ const idbKv = { get, set, del };
 const STORAGE_KEY = 'pcr-workbench:project:v1';
 const LAST_KEY = 'pcr-workbench:last:v1';
 const suiteHost = window.location.hostname.toLowerCase();
-const isWispLab = suiteHost === 'wisplab.top' || suiteHost.endsWith('.wisplab.top');
+const isDesktop = window.location.protocol === 'app:' || (window as Window & { wispLabDesktop?: { isDesktop?: boolean } }).wispLabDesktop?.isDesktop === true;
+const platformHome = isDesktop ? 'app://wisplab/' : 'https://wisplab.top/';
+const isWispLab = isDesktop || suiteHost === 'wisplab.top' || suiteHost.endsWith('.wisplab.top');
 const suiteLinks = {
-  wb: isWispLab ? 'https://wb.wisplab.top/' : 'https://gaoyuan-0423.github.io/blot-workbench/',
-  pathology: isWispLab ? 'https://pathology.wisplab.top/' : 'https://gaoyuan-0423.github.io/pathology-workbench/',
-  pcr: isWispLab ? 'https://pcr.wisplab.top/' : 'https://gaoyuan-0423.github.io/pcr-workbench/',
+  wb: isDesktop ? 'app://wisplab/wb/' : isWispLab ? 'https://wb.wisplab.top/' : 'https://gaoyuan-0423.github.io/blot-workbench/',
+  pathology: isDesktop ? 'app://wisplab/pathology/' : isWispLab ? 'https://pathology.wisplab.top/' : 'https://gaoyuan-0423.github.io/pathology-workbench/',
+  pcr: isDesktop ? 'app://wisplab/pcr/' : isWispLab ? 'https://pcr.wisplab.top/' : 'https://gaoyuan-0423.github.io/pcr-workbench/',
 };
 
-interface ProjectState {
-  fileName: string;
-  sheetName: string;
-  matrix: string[][];
-  headerRow: number;
-  mapping: ColumnMapping;
-  excluded: Record<number, boolean>;
-  config: AnalysisConfig;
-  /** 多文件合并模式：直接存规范行（matrix 为空） */
-  merged?: { rows: AnalysisRow[]; perFile: PerFileInfo[] } | null;
-  /** 一键分析报告与熔解汇总（恢复时重显报告卡） */
-  autoReport?: QualityReport | null;
-  autoMelt?: MeltGeneSummary[];
-}
 
 const STEPS = ['导入数据', '确认映射', '孔板与配置', '分析结果'];
 const STEP_NOTES = ['上传仪器导出文件', '核对自动识别的列', '检查复孔和实验设置', '查看结果与导出图表'];
@@ -86,6 +76,51 @@ export default function App() {
   const [projectList, setProjectList] = useState<ProjectMeta[]>([]);
   /** 用户已主动加载过数据（新表/示例）——挂载恢复必须让位于用户操作 */
   const userLoadedRef = useRef(false);
+  const [sourceFiles, setSourceFiles] = useState<File[]>([]);
+  const [meltFile, setMeltFile] = useState<File | null>(null);
+  const [inputMatrices, setInputMatrices] = useState<FileMatrixInput[]>([]);
+  const [sourceBundleId, setSourceBundleId] = useState('');
+  const [projectGaps, setProjectGaps] = useState<string[]>([]);
+  const snapshotRef = useRef<ProjectState | null>(null);
+  const importBusyRef = useRef(false);
+  const onImportBusy = useCallback((busy: boolean) => { importBusyRef.current = busy; }, []);
+  const projectSnapshot = useMemo<ProjectState>(() => ({ fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, autoReport, autoMelt, meltTable, inputMatrices, sourceFiles, meltFile, projectName, step, guessBasis, sourceBundleId }), [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, autoReport, autoMelt, meltTable, inputMatrices, sourceFiles, meltFile, projectName, step, guessBasis, sourceBundleId]);
+  snapshotRef.current = projectSnapshot;
+  const translateRef = useRef(t); translateRef.current = t;
+
+  useEffect(() => {
+    if (!sourceBundleId) return;
+    void set(`pcr-workbench:sources:${sourceBundleId}`, { sourceFiles, meltFile });
+  }, [sourceBundleId, sourceFiles, meltFile]);
+
+  useEffect(() => {
+    let mounted = true;
+    const dispose = connectProjectAdapter({
+    tool: 'pcr',
+    exportProject: async () => {
+      if (importBusyRef.current) throw new Error(t('请等待当前导入完成'));
+      const state = snapshotRef.current!;
+      const result = await exportPcrProject(state);
+      return { blob: result.blob, name: `${(state.projectName || state.fileName || 'PCR project').replace(/\.[^.]+$/, '')}.wisplab.zip`, format: 'wisplab-pcr-v1.zip', summaryTranslations: { zh: result.completeness.join('\n') || '包含原文件、表格及配置', en: result.completeness.join('\n') || 'Includes original files, tables and settings' }, summary: result.completeness.length ? result.completeness.join('\n') : '包含原文件、表格及配置 / Includes original files, tables and settings' };
+    },
+    importProject: async (blob, options) => {
+      const before = snapshotRef.current;
+      const current = () => mounted && options?.isCurrent?.() !== false && snapshotRef.current === before;
+      const { project: state, completeness } = await importPcrProject(blob);
+      if (!current()) throw new DOMException('Cancelled', 'AbortError');
+      if (importBusyRef.current) throw new Error(translateRef.current('请等待当前导入完成'));
+      if (!window.confirm(translateRef.current('打开此版本会替换当前工作内容，是否继续？') + (completeness.length ? '\n\n' + completeness.join('\n') : ''))) throw new DOMException('Cancelled', 'AbortError');
+      if (!current()) throw new DOMException('Cancelled', 'AbortError');
+      userLoadedRef.current = true;
+      setFileName(state.fileName); setSheetName(state.sheetName); setMatrix(state.matrix); setHeaderRow(state.headerRow); setMapping(state.mapping); setExcluded(state.excluded); setConfig(state.config);
+      setMerged(state.merged ?? null); setAutoReport(state.autoReport ?? null); setAutoMelt(state.autoMelt ?? []); setMeltTable(state.meltTable ?? null); setInputMatrices(state.inputMatrices ?? []);
+      setSourceFiles(state.sourceFiles ?? []); setMeltFile(state.meltFile ?? null); setSourceBundleId(crypto.randomUUID());
+      setProjectId(null); setProjectName(state.projectName ?? state.fileName); setGuessBasis(state.guessBasis ?? ''); setStep(state.step ?? 4); setRestored(true); setProjectGaps(completeness);
+      setToast(t('项目已恢复；历史缺失附件不会自动补全。'));
+    },
+    });
+    return () => { mounted = false; dispose(); };
+  }, []);
 
   // 恢复优先级：localStorage 同步镜像（最新，见下方镜像写入）> 最近课题；
   // 异步恢复期间用户可能已拖入新文件——已加载则放弃恢复，避免旧数据覆盖新上传
@@ -116,7 +151,7 @@ export default function App() {
       try {
         const raw = localStorage.getItem(LAST_KEY);
         if (raw) {
-          const mirror = JSON.parse(raw) as ProjectState & { id: string | null };
+          const mirror = decodeJson(raw) as ProjectState & { id: string | null };
           // 镜像挂在一个已被删除的课题上 → 不复活
           if (!mirror.id || list.some((m) => m.id === mirror.id)) {
             restoredState = mirror;
@@ -141,6 +176,14 @@ export default function App() {
 
       if (userLoadedRef.current) return; // 双重检查
       if (!restoredState) return;
+      restoredState = recoverLegacyNumbers(restoredState);
+      if (restoredState.sourceBundleId) {
+        const sources = await get<{ sourceFiles: File[]; meltFile: File | null }>(`pcr-workbench:sources:${restoredState.sourceBundleId}`);
+        if (sources) restoredState = { ...restoredState, ...sources };
+      }
+      if (userLoadedRef.current) return;
+      setSourceFiles(restoredState.sourceFiles ?? []); setMeltFile(restoredState.meltFile ?? null); setSourceBundleId(restoredState.sourceBundleId ?? '');
+      setInputMatrices(restoredState.inputMatrices ?? []); setMeltTable(restoredState.meltTable ?? null); setGuessBasis(restoredState.guessBasis ?? '');
       setProjectId(restoredMeta?.id ?? null);
       setProjectName(restoredMeta?.name ?? '');
       setFileName(restoredState.fileName);
@@ -172,7 +215,7 @@ export default function App() {
         id = newProjectId();
         setProjectId(id);
       }
-      const state: ProjectState = { fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, autoReport, autoMelt };
+      const state: ProjectState = snapshotRef.current!;
       const meta: ProjectMeta = {
         id,
         name: projectName || fileName || '未命名课题',
@@ -184,7 +227,7 @@ export default function App() {
       await saveProject(idbKv, meta, state);
       setProjectList(await listProjects(idbKv));
     })();
-  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, projectId, projectName, autoReport?.score]);
+  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, projectId, projectName, autoReport, autoMelt, meltTable, sourceFiles, meltFile, inputMatrices, sourceBundleId, step, guessBasis]);
 
   // 同步镜像：每次状态变化立即写 localStorage（同步 API，刷新必然拿到最新）。
   // IDB 的防抖保存负责课题列表；镜像负责"当前工作状态"的可靠恢复。
@@ -193,7 +236,7 @@ export default function App() {
     try {
       localStorage.setItem(
         LAST_KEY,
-        JSON.stringify({
+        encodeJson({
           fileName,
           sheetName,
           matrix,
@@ -204,13 +247,14 @@ export default function App() {
           merged,
           autoReport,
           autoMelt,
+          meltTable, inputMatrices, sourceBundleId, projectName, step, guessBasis,
           id: projectId,
         } satisfies ProjectState & { id: string | null }),
       );
     } catch {
       // 超出 localStorage 配额（超大表）时跳过——IDB 防抖保存仍兜底
     }
-  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, projectId]);
+  }, [fileName, sheetName, matrix, headerRow, mapping, excluded, config, merged, projectId, autoReport, autoMelt, meltTable, inputMatrices, sourceBundleId, projectName, step, guessBasis]);
 
   useEffect(() => {
     if (matrix.length === 0 && !merged) return;
@@ -236,7 +280,8 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const handleMergeLoaded = useCallback((inputs: FileMatrixInput[]) => {
+  const handleMergeLoaded = useCallback((inputs: FileMatrixInput[], files: File[]) => {
+    setSourceFiles(files); setMeltFile(null); setInputMatrices(inputs); setSourceBundleId(crypto.randomUUID()); setProjectGaps([]);
     userLoadedRef.current = true;
     const m = mergeFileMatrices(inputs);
     const genes = [...new Set(m.rows.map((r) => r.target).filter(Boolean))];
@@ -267,6 +312,8 @@ export default function App() {
   }, []);
 
   const handleMeltTableFile = useCallback(async (file: File) => {
+    importBusyRef.current = true;
+    try {
     const parsed = await readInputFile(file);
     const matrix =
       parsed.kind === 'rdml'
@@ -281,12 +328,15 @@ export default function App() {
       return;
     }
     setMeltTable({ fileName: file.name, byWell: Object.fromEntries(byWell) });
+    setMeltFile(file); setSourceBundleId(crypto.randomUUID());
     setToast(`已附加熔解摘要表：${byWell.size} 个孔位`);
+    } finally { importBusyRef.current = false; }
   }, []);
 
   const handleAutoFile = useCallback(async (file: File) => {
     userLoadedRef.current = true;
     const result = await analyzeFileAuto(file);
+    setSourceFiles([file]); setMeltFile(null); setMeltTable(null); setInputMatrices([]); setSourceBundleId(crypto.randomUUID()); setProjectGaps([]); setMerged(null);
     setFileName(result.fileName);
     setSheetName(result.sheetName);
     setMatrix(result.matrix);
@@ -304,7 +354,8 @@ export default function App() {
     setToast(`一键分析完成：质量分 ${result.report.score}/100 · ${result.report.summary}`);
   }, []);
 
-  const handleLoaded = useCallback((name: string, sheet: string, m: string[][]) => {
+  const handleLoaded = useCallback((name: string, sheet: string, m: string[][], file: File) => {
+    setSourceFiles([file]); setMeltFile(null); setMeltTable(null); setInputMatrices([]); setSourceBundleId(crypto.randomUUID()); setProjectGaps([]); setMerged(null); setAutoReport(null); setAutoMelt([]);
     userLoadedRef.current = true;
     const s = sniff(m);
     setFileName(name);
@@ -380,6 +431,8 @@ export default function App() {
   }
 
   function reset() {
+    userLoadedRef.current = true;
+    setSourceFiles([]); setMeltFile(null); setInputMatrices([]); setSourceBundleId(''); setProjectGaps([]);
     setFileName('');
     setSheetName('');
     setMatrix([]);
@@ -403,9 +456,9 @@ export default function App() {
     <div className="app-shell">
       <div className="suite-bar">
         <div className={`suite-bar-inner${isWispLab ? ' suite-with-home' : ''}`}>
-          <span className="suite-brand"><span className="suite-mark"><UiIcon name="grid" /></span>{t("实验工作台")}</span>
+          <a className="suite-brand" href={withLanguage(platformHome, language)}><span className="suite-mark" aria-hidden="true"><UiIcon name="grid" /></span><span>{t("WispLab实验数据分析平台")}</span></a>
           <nav className="suite-nav" aria-label={t("实验工作台导航")}>
-            {isWispLab && <a href={withLanguage("https://wisplab.top/", language)}>{t("总首页")}</a>}
+            {isWispLab && <a href={withLanguage(platformHome, language)}>{t("总首页")}</a>}
             <a href={withLanguage(suiteLinks.wb, language)}>WB</a>
             <a href={withLanguage(suiteLinks.pathology, language)}>{t("病理")}</a>
             <a href={withLanguage(suiteLinks.pcr, language)} aria-current="page">PCR</a>
@@ -428,6 +481,7 @@ export default function App() {
           <span className="privacy-note"><UiIcon name="shield" />{t("数据在浏览器中解析与计算")}</span>
         </div>
       </header>
+      {projectGaps.length > 0 && <div className="card" role="status"><strong>{t("项目完整性说明")}</strong><ul>{projectGaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul></div>}
       {projectName && <div className="current-project"><UiIcon name="folder" /><span>{t("当前课题")}</span><strong title={projectName}>{projectName}</strong></div>}
       {showProjects && (
         <ProjectsDialog
@@ -441,8 +495,11 @@ export default function App() {
           onOpen={(id) => {
             void (async () => {
               const meta = projectList.find((m) => m.id === id);
-              const state = await loadProjectState<ProjectState>(idbKv, id);
-              if (!state) return;
+              const savedState = await loadProjectState<ProjectState>(idbKv, id);
+              if (!savedState) return;
+              const state = recoverLegacyNumbers(savedState);
+              userLoadedRef.current = true;
+              setSourceFiles(state.sourceFiles ?? []); setMeltFile(state.meltFile ?? null); setInputMatrices(state.inputMatrices ?? []); setSourceBundleId(state.sourceBundleId ?? ''); setProjectGaps([]);
               setShowProjects(false);
               setProjectId(id);
               setProjectName(meta?.name ?? state.fileName);
@@ -456,7 +513,7 @@ export default function App() {
               setMerged(state.merged ?? null);
               setAutoReport(state.autoReport ?? null);
               setAutoMelt(state.autoMelt ?? []);
-              setMeltTable(null);
+              setMeltTable(state.meltTable ?? null);
               setRestored(true);
               setStep(4);
               setToast(`已打开课题「${meta?.name ?? state.fileName}」`);
@@ -518,7 +575,7 @@ export default function App() {
 
       {step === 1 && (
         <>
-          <UploadPanel onLoaded={handleLoaded} onAutoFile={handleAutoFile} onMergeLoaded={handleMergeLoaded} />
+          <UploadPanel onBusyChange={onImportBusy} onLoaded={handleLoaded} onAutoFile={handleAutoFile} onMergeLoaded={handleMergeLoaded} />
           <StepHelp step={1} />
         </>
       )}
