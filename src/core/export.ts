@@ -15,7 +15,7 @@ export function resultAoa(out: AnalysisOutput, language: Language = 'zh'): (stri
   const header = [
     '基因 Target', '样本 Sample', '组别 Group', '是否对照 Control', '复孔数 n',
     '孔位 Wells', '平均 Cq', 'Cq SD', '内参 Cq (池化)', 'ΔCt', 'ΔΔCt',
-    'Fold Change (2^-ΔΔCt)', 'FC SD', 'p 值（总体）', 'Dunnett 校正 p', '显著性', '统计方法',
+    out.effMode ? 'Fold Change (Pfaffl)' : 'Fold Change (2^-ΔΔCt)', 'FC SD', 'p 值（总体）', 'Dunnett 校正 p', '显著性', '统计方法',
   ];
   const rows = out.results.map((r) => [
     r.target, r.sample, r.group || '', t(r.isControl ? '是' : '否'), r.n,
@@ -99,8 +99,8 @@ export function buildWorkbook(
     [t('源文件'), meta.fileName],
     [t('内参基因（池化）'), meta.refGenes.join('、')],
     [t('对照组样本'), meta.controlSamples.join('、')],
-    [t('方法'), t('Livak 2^-ΔΔCt；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA + Dunnett）')],
-    ...Object.entries(meta.efficiencies ?? {})
+    [t('方法'), t(out.effMode ? 'Pfaffl 效率校正；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA + Dunnett）' : 'Livak 2^-ΔΔCt；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA + Dunnett）')],
+    ...Object.entries(out.efficiencies)
       .filter(([, v]) => Number.isFinite(v) && v !== 100)
       .map(([g, v]) => [t(`效率 ${g}`), t(`${v}%（E=${(1 + v / 100).toFixed(3)}，Pfaffl 校正生效）`)]),
     [t('导出时间'), new Date().toLocaleString(language === 'en' ? 'en' : 'zh-CN')],

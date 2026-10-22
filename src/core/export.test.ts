@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import { describe, expect, it } from 'vitest';
 import { buildWorkbook, resultAoa, toCsv, workbookToBuffer } from './export';
 import { extractRows, analyzeDeltaDeltaCt } from './analysis';
@@ -37,3 +38,21 @@ describe('导出', () => {
     expect(buf.byteLength).toBeGreaterThan(2000); // 真 xlsx zip
   });
 });
+
+for (const language of ['zh', 'en'] as const) {
+  it(`exports the actual Pfaffl method and unchanged fold values in ${language}`, () => {
+    const corrected = analyzeDeltaDeltaCt(rows, { controlSamples: ['C1'], refGenes: ['GAPDH'], qc: DEFAULT_QC, efficiencies: { LDHA: 92, GAPDH: 100 } });
+    expect(corrected.effMode).toBe(true);
+    const table = resultAoa(corrected, language);
+    expect(table[0][11]).toBe('Fold Change (Pfaffl)');
+    expect(Number(table[2][11])).toBeCloseTo(corrected.results[1].foldChange!, 4);
+    // Stale UI metadata must not override the method stored with the calculation.
+    const wb = buildWorkbook(corrected, rows, {}, { fileName: 'synthetic.csv', refGenes: ['GAPDH'], controlSamples: ['C1'], efficiencies: { LDHA: 100 } }, language);
+    const info = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames.at(-1)!], { header: 1 });
+    const text = JSON.stringify(info);
+    expect(text).toContain('Pfaffl');
+    expect(text).not.toContain('Livak');
+    expect(text).toContain('92%');
+    expect(resultAoa(out, language)[0][11]).toBe('Fold Change (2^-ΔΔCt)');
+  });
+}

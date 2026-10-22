@@ -5,7 +5,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   useEffect(() => {
     document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
-    document.title = language === 'zh' ? 'PCR 工作台' : 'PCR Workbench';
+    document.title = language === 'zh' ? 'WispLab实验数据分析 · PCR 工作台' : 'WispLab Experimental Data Analysis · PCR Workbench';
     try { localStorage.setItem(LANGUAGE_KEY, language); } catch { /* UI still works without storage. */ }
     const next = new URL(window.location.href);
     next.searchParams.set('lang', language);

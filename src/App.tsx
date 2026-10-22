@@ -456,7 +456,7 @@ export default function App() {
     <div className="app-shell">
       <div className="suite-bar">
         <div className={`suite-bar-inner${isWispLab ? ' suite-with-home' : ''}`}>
-          <a className="suite-brand" href={withLanguage(platformHome, language)}><span className="suite-mark" aria-hidden="true"><UiIcon name="grid" /></span><span>{t("WispLab实验数据分析平台")}</span></a>
+          <a className="suite-brand" href={withLanguage(platformHome, language)}><span className="suite-mark" aria-hidden="true"><UiIcon name="grid" /></span><span>{t("WispLab实验数据分析")}</span></a>
           <nav className="suite-nav" aria-label={t("实验工作台导航")}>
             {isWispLab && <a href={withLanguage(platformHome, language)}>{t("总首页")}</a>}
             <a href={withLanguage(suiteLinks.wb, language)}>WB</a>
@@ -675,7 +675,7 @@ export default function App() {
           {t(toast)}
         </div>
       )}
-      <footer className="app-footer"><span>PCR Workbench</span><span>{t("本地分析 · 课题自动保存 · 结果随时导出")}</span></footer>
+      <footer className="app-footer"><span>{t("WispLab实验数据分析")}</span><span>{t("本地分析 · 课题自动保存 · 结果随时导出")}</span></footer>
       </main>
     </div>
   );
