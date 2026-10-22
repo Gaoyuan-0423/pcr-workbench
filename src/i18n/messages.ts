@@ -436,6 +436,7 @@ export const messages: Record<string, string> = {
   "源文件": "Source file",
   "内参基因（池化）": "Reference genes (pooled)",
   "方法": "Method",
+  "Pfaffl 效率校正；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA + Dunnett）": "Pfaffl efficiency correction; statistics on individual ΔCt (Welch t for 2 groups / one-way ANOVA + Dunnett for multiple groups)",
   "Livak 2^-ΔΔCt；统计在个体 ΔCt 上（2组 Welch t / 多组单因素 ANOVA + Dunnett）": "Livak 2^-ΔΔCt; statistics on individual ΔCt (Welch t for 2 groups / one-way ANOVA + Dunnett for multiple groups)",
   "效率 {0}": "Efficiency {0}",
   "{0}%（E={1}，Pfaffl 校正生效）": "{0}% (E={1}, Pfaffl correction active)",
