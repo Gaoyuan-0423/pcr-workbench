@@ -141,12 +141,10 @@ export function buildQualityReport(input: ReportInput): QualityReport {
   if (output.refGenesUsed.length === 0) {
     issues.push({ code: 'NO_REF_GENE', severity: 'error', message: '未识别到常见内参基因（GAPDH/ACTB 等），ΔCt 无法计算' });
     advice.push({ code: 'SET_REF', message: '在实验配置中手动勾选内参基因；建议选用经过验证的稳定内参' });
-  } else if (output.refGenesUsed.length === 1) {
-    issues.push({ code: 'SINGLE_REF', severity: 'info', target: output.refGenesUsed[0], message: `仅使用单一内参（${output.refGenesUsed[0]}）` });
-    advice.push({ code: 'MULTI_REF', message: '建议增加 1–2 个内参基因池化，降低单一内参波动带来的偏差（界面勾选即可）' });
   } else {
     // 内参稳定性：池化 refCq 在样本间的波动
-    const refCqs = output.results.filter((r) => !r.isControl).map((r) => r.refCq).filter((v): v is number => v != null);
+    const bySample = new Map(output.results.filter((r) => !r.isControl && Number.isFinite(r.refCq)).map((r) => [r.sample, r.refCq!]));
+    const refCqs = [...bySample.values()];
     if (refCqs.length >= 3) {
       const s = sd(refCqs);
       if (s > 0.7) {
