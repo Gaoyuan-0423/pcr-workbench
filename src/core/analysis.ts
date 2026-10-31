@@ -159,15 +159,28 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
     });
   }
 
-  // 2. 每样本内参池化
+  const effPct = (gene: string): number => {
+    const value = config.efficiencies?.[gene];
+    return Number.isFinite(value) && value != null ? value : 100;
+  };
+  // 2. 每样本内参池化。Cq 均值用于既有 ΔCt；效率校正先逐基因转换再几何池化。
+  // Reference normalization is mean(Cq_j * log2(E_j)), not mean(Cq) * log2(mean(E)).
   const refCqBySample = new Map<string, number>();
+  const referenceLog2BySample = new Map<string, number>();
   for (const s of samples) {
     const refs: number[] = [];
+    const referenceLog2: number[] = [];
     for (const g of refGenes) {
       const e = entries.get(`${s}||${g}`);
-      if (e) refs.push(e.meanCq);
+      if (e) {
+        refs.push(e.meanCq);
+        referenceLog2.push(e.meanCq * Math.log2(1 + effPct(g) / 100));
+      }
     }
-    if (refs.length) refCqBySample.set(s, mean(refs));
+    if (refs.length) {
+      refCqBySample.set(s, mean(refs));
+      referenceLog2BySample.set(s, mean(referenceLog2));
+    }
   }
 
   // 内参在部分样本未检出的显式告警（否则会静默产出 0 条结果）
@@ -246,26 +259,21 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
       if (controls.includes(d.sample)) ctrlVals.push(...d.deltaCtValues);
     }
 
-    // Pfaffl 效率校正：FC = E_T^(Ct_T,对照均值 − Ct_个体) / E_R^(Ct_R,对照均值 − 参照Cq_样本)
-    // 任一效率 = 100%（E=2）时公式严格退化为 Livak 2^-ΔΔCt
-    const effPct = (gene: string): number => {
-      const v = config.efficiencies?.[gene];
-      return Number.isFinite(v) && v != null ? (v as number) : 100;
-    };
+    // Generalized Pfaffl: target relative quantity / geometric mean of reference relative quantities.
+    // All participating efficiencies = 100% (E=2) retains the existing Livak path.
     const eTarget = 1 + effPct(g) / 100;
-    const eRef = refGenes.length ? 1 + mean(refGenes.map(effPct)) / 100 : 2;
-    const effActive = Math.abs(eTarget - 2) > 1e-9 || Math.abs(eRef - 2) > 1e-9;
+    const effActive = Math.abs(eTarget - 2) > 1e-9 || refGenes.some(ref => Math.abs(effPct(ref) - 100) > 1e-7);
     let ctTCtrl: number | null = null;
     {
       const ctrlRaw: number[] = [];
       for (const d of geneEntries) if (controls.includes(d.sample)) ctrlRaw.push(...d.values);
       if (ctrlRaw.length) ctTCtrl = mean(ctrlRaw);
     }
-    const ctrlRefCqs = controls
-      .map((s) => refCqBySample.get(s))
+    const ctrlReferenceLog2 = controls
+      .map((s) => referenceLog2BySample.get(s))
       .filter((v): v is number => v != null);
-    const ctRCtrl = ctrlRefCqs.length ? mean(ctrlRefCqs) : null;
-    const geneEffMode = effActive && ctTCtrl != null && ctRCtrl != null;
+    const controlReferenceLog2 = ctrlReferenceLog2.length ? mean(ctrlReferenceLog2) : null;
+    const geneEffMode = effActive && ctTCtrl != null && controlReferenceLog2 != null;
     if (geneEffMode) anyEffMode = true;
 
     // 多组：ANOVA 总体检验 + Dunnett vs 对照的逐组校正 p
@@ -306,7 +314,8 @@ export function analyzeDeltaDeltaCt(rows: AnalysisRow[], config: AnalysisConfig)
     for (const d of geneEntries) {
       const isControl = controls.includes(d.sample);
       const fcValues = geneEffMode
-        ? d.values.map((v) => Math.pow(eTarget, (ctTCtrl as number) - v) / Math.pow(eRef, (ctRCtrl as number) - d.refCq))
+        ? d.values.map((v) => Math.pow(2, ((ctTCtrl as number) - v) * Math.log2(eTarget)
+          + (referenceLog2BySample.get(d.sample) as number) - (controlReferenceLog2 as number)))
         : d.deltaCtValues.map((v) => Math.pow(2, -(v - ctrlMean)));
       const fcMean = mean(fcValues);
       const fcSd = sd(fcValues);

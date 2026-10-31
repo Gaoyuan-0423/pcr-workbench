@@ -19,7 +19,7 @@ const out = analyzeDeltaDeltaCt(rows, {
 });
 ```
 
-- `efficiencies` 任一非 100 自动切换 Pfaffl（`E_T^(Ct_T,ctrl−v)/E_R^(Ct_R,ctrl−refCq)`，均值内参效率）；任一为 100 严格退化 Livak。
+- `efficiencies` 任一参与基因非 100 自动切换效率校正：各内参先使用自身效率计算相对量，再取几何均值作分母；不能先平均内参效率。单内参即 Pfaffl，全部效率为 100 时保留 Livak 路径。One reference is sufficient; multiple references remain optional.
 - 统计：≥3 处理泳道走 ANOVA+Dunnett，否则 Welch t；统计一律在个体 ΔCt 值上做。
 
 ## ⚠ stats.ts Dunnett 求积——不要回退
