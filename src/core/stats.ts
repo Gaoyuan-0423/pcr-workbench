@@ -116,7 +116,9 @@ export function welchTTest(a: number[], b: number[]): TTestResult {
   const num = (v1 / n1 + v2 / n2) ** 2;
   const den = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1);
   const df = den > 0 ? num / den : n1 + n2 - 2;
-  const p = 2 * (1 - studentTCdf(Math.abs(t), df));
+  // P(|T_df| >= |t|) = I_{df/(df+t²)}(df/2, 1/2).
+  // Evaluate the tail directly: subtracting a CDF rounded to 1 loses small p values.
+  const p = betaInc(df / 2, 0.5, df / (df + t * t));
   return { t, df, p: Math.min(1, Math.max(0, p)) };
 }
 
