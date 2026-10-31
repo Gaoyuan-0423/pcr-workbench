@@ -69,6 +69,50 @@ describe('Welch t 检验', () => {
     expect(r1.p).toBeLessThan(0.001);
     expect(r1.p).toBeCloseTo(r2.p, 10);
   });
+  // Independent references generated with R 4.5.3 (2026-03-11), base stats:
+  // t.test(a, b, alternative = "two.sided", var.equal = FALSE)
+  // Store the reference values so CI does not need R or use our own beta implementation as its oracle.
+  it.each([
+    {
+      name: 'ordinary probabilities',
+      a: [1.2, 0.9, 1.1, 1.0, 1.3], b: [1.1, 0.8, 1.2, 1.0, 0.9],
+      p: 0.34659350708733383, df: 8.000000000000002,
+    },
+    {
+      name: 'deep tail with equal sample sizes and variances',
+      a: Array.from({ length: 10 }, (_, i) => 24 + (i - 4.5) * 0.02),
+      b: Array.from({ length: 10 }, (_, i) => 20 + (i - 4.5) * 0.02),
+      p: 3.2606067405940227e-29, df: 18,
+    },
+    {
+      name: 'deep tail with unequal sample sizes and variances',
+      a: [19.95, 19.98, 20, 20.02, 20.05],
+      b: [23.82, 23.9, 23.98, 24, 24.02, 24.08, 24.13, 24.21],
+      p: 2.7799557536661831e-14, df: 8.90857309134996,
+    },
+    {
+      name: 'representable probability far below machine epsilon',
+      a: Array.from({ length: 10 }, (_, i) => 24 + (i - 4.5) * 0.0002),
+      b: Array.from({ length: 10 }, (_, i) => 20 + (i - 4.5) * 0.0002),
+      p: 3.2836757307965995e-65, df: 18,
+    },
+    {
+      name: 'one constant group and one variable group',
+      a: [20, 20, 20], b: [23.98, 24, 24.02],
+      p: 8.333229168113051e-6, df: 2,
+    },
+  ])('matches R Welch reference: $name', ({ a, b, p, df }) => {
+    for (const result of [welchTTest(a, b), welchTTest(b, a)]) {
+      expect(result.p).toBeGreaterThan(0);
+      // Relative error is essential: an absolute tolerance would allow p=0 in deep tails.
+      expect(Math.abs(result.p / p - 1)).toBeLessThan(1e-10);
+      expect(result.df).toBeCloseTo(df, 10);
+    }
+  });
+  it('preserves equal-mean and legacy zero-variance results', () => {
+    expect(welchTTest([1, 2, 3], [1, 2, 3])).toEqual({ t: 0, df: 4, p: 1 });
+    expect(welchTTest([2, 2, 2], [2, 2, 2])).toEqual({ t: 0, df: 4, p: 1 });
+  });
   it('样本不足 → NaN', () => {
     expect(Number.isNaN(welchTTest([1], [1, 2, 3]).p)).toBe(true);
   });
