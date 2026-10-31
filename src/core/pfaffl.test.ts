@@ -72,3 +72,45 @@ describe('Pfaffl 效率校正', () => {
     expect(a.results.map((r) => r.foldChange)).toEqual(b.results.map((r) => r.foldChange));
   });
 });
+
+describe('optional multiple references retain their individual efficiencies', () => {
+  // Independent R 4.5.3 quantity-domain oracle, qBase generalized model:
+  // 1 / sqrt(1.9^(-10) * 2.1^10) = 0.60627761164574501.
+  // https://pmc.ncbi.nlm.nih.gov/articles/PMC1852402/ (normalized relative quantities).
+  const data: (string | number)[][] = [
+    ['C1','R1',20],['C1','R1',20],['C1','R1',20],['C1','R2',30],
+    ['C1','T',25],['C1','T',25],
+    ['S1','R1',30],['S1','R2',20],['S1','R2',20],['S1','R2',20],
+    ['S1','T',25],['S1','T',25],
+  ];
+  const config = {controlSamples:['C1'],refGenes:['R1','R2'],qc:DEFAULT_QC};
+  it('does not cancel 90% and 110% reference efficiencies into a false Livak result', () => {
+    const efficiencies = {R1:90,R2:110,T:100};
+    const out = analyzeDeltaDeltaCt(buildRows(data), {...config,efficiencies});
+    const treatment = out.results.find(row => row.sample === 'S1')!;
+    expect(out.effMode).toBe(true);
+    expect(treatment.foldChange).toBeCloseTo(0.60627761164574501,12);
+    expect(treatment.fcValues).toHaveLength(2);
+    treatment.fcValues.forEach(value => expect(value).toBeCloseTo(0.60627761164574501,12));
+    expect(treatment.refCq).toBe(25); // Raw ΔCt summaries and tests retain their prior meaning.
+    expect(treatment.statMethod).toContain('Pfaffl');
+    const reverse = analyzeDeltaDeltaCt(buildRows(data), {...config,refGenes:['R2','R1'],efficiencies});
+    expect(reverse.results).toEqual(out.results);
+  });
+  it('preserves per-well target aggregation after reference normalization', () => {
+    const varied = data.filter(row => !(row[0] === 'S1' && row[1] === 'T'));
+    varied.push(['S1','T',23.9],['S1','T',24],['S1','T',24.1]);
+    const out = analyzeDeltaDeltaCt(buildRows(varied), {...config,efficiencies:{T:95,R1:90,R2:110}});
+    // R: mean(1.95^(25-c(23.9,24,24.1))/sqrt(1.9^(-10)*2.1^10)).
+    expect(out.results.find(row => row.sample === 'S1')!.foldChange).toBeCloseTo(1.1839995793479463,12);
+  });
+  it('keeps optional equal-efficiency references and all-100% Livak results unchanged', () => {
+    const rows = buildRows(data);
+    const plain = analyzeDeltaDeltaCt(rows,config);
+    const all100 = analyzeDeltaDeltaCt(rows,{...config,efficiencies:{R1:100,R2:100,T:100}});
+    expect(all100.results).toEqual(plain.results);
+    expect(all100.effMode).toBe(false);
+    const equal = analyzeDeltaDeltaCt(rows,{...config,efficiencies:{R1:90,R2:90,T:95}});
+    expect(equal.results.find(row => row.sample === 'S1')!.foldChange).toBeCloseTo(1,12);
+  });
+});
