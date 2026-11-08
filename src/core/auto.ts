@@ -9,6 +9,7 @@ import { sniff } from './sniff';
 import { fitAllStandardCurves } from './standard';
 import { summarizeMeltByGene, type RdmlMeltCurve } from './melt';
 import { sd } from './stats';
+import { describeNumericNote, resolveNumericColumns, type NumericColumnNote } from './number';
 import { isStandardRow } from './analysis';
 import { mappingComplete, type AnalysisConfig, type AnalysisOutput, type ColumnMapping, type ExperimentalDesign, type QcFlags } from './types';
 
@@ -117,6 +118,8 @@ export interface ReportInput {
   guess: ExperimentGuess;
   mappingComplete: boolean;
   headerRow: number;
+  /** Quantity-column readings that rest on a decimal-mark assumption. */
+  numericNotes?: NumericColumnNote[];
 }
 
 /** 规则引擎：从分析产物中找出问题并给出可执行的优化建议（完全离线、确定性）。 */
@@ -139,6 +142,9 @@ export function buildQualityReport(input: ReportInput): QualityReport {
   if (!input.mappingComplete) {
     issues.push({ code: 'MAPPING_INCOMPLETE', severity: 'error', message: '必需列（样本/基因/Cq）未全部识别，分析不可信' });
     advice.push({ code: 'FIX_MAPPING', message: '回到第 2 步手动指定列映射后再分析' });
+  }
+  for (const note of input.numericNotes ?? []) {
+    issues.push({ code: 'QUANTITY_DECIMAL_AMBIGUOUS', severity: 'warning', ...(note.fileName ? { target: note.fileName } : {}), message: describeNumericNote(note) });
   }
   if (input.headerRow > 10) {
     issues.push({ code: 'DEEP_HEADER', severity: 'info', message: `表头位于第 ${input.headerRow + 1} 行，文件含大段元数据，已自动跳过` });
@@ -259,7 +265,8 @@ export function analyzeAuto(
   opts: { fileName?: string; sheetName?: string; presetEfficiencies?: Record<string, number>; meltCurves?: RdmlMeltCurve[]; experimentalDesign?: ExperimentalDesign } = {},
 ): AutoAnalysisResult {
   const s = sniff(matrix);
-  const rows = extractRows(matrix.slice(s.headerRow + 1), s.mapping);
+  const dataRows = matrix.slice(s.headerRow + 1);
+  const rows = extractRows(dataRows, s.mapping);
   const samples = [...new Set(rows.filter((r) => !isNtcRow(r) && !isStandardRow(r)).map((r) => r.sample).filter(Boolean))].sort();
   const genes = [...new Set(rows.map((r) => r.target).filter(Boolean))].sort();
   const groupMap = new Map(rows.filter((r) => !isNtcRow(r) && !isStandardRow(r)).map((r) => [r.sample, r.group] as const));
@@ -295,6 +302,7 @@ export function analyzeAuto(
     guess,
     mappingComplete: mappingComplete(s.mapping),
     headerRow: s.headerRow,
+    numericNotes: resolveNumericColumns(dataRows, s.mapping).notes.map((note) => ({ ...note, fileName: opts.fileName })),
   });
 
   // 标准曲线信息进报告
