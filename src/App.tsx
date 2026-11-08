@@ -424,7 +424,8 @@ export default function App() {
     rows, flags, output: out, mappingComplete: canGoConfig, headerRow, numericNotes,
     guess: { controlSamples: out.controlSamples, refGenes: out.refGenesUsed, basis: guessBasis },
   }) : null, [out, rows, flags, canGoConfig, headerRow, numericNotes, guessBasis]);
-  const analysisIdentity = useMemo(() => JSON.stringify([rows, config, out, currentReport, autoMelt]), [rows, config, out, currentReport, autoMelt]);
+  // The import basis is sent to AI separately from the recomputed quality report.
+  const analysisIdentity = useMemo(() => JSON.stringify([rows, config, out, currentReport, autoMelt, guessBasis]), [rows, config, out, currentReport, autoMelt, guessBasis]);
   function invalidateDesignConfirmation() {
     setConfig((prev) => prev.experimentalDesign ? { ...prev,
       experimentalDesign: { ...prev.experimentalDesign, confirmed: false } } : prev);
@@ -527,6 +528,7 @@ export default function App() {
               setMapping(state.mapping);
               setExcluded(state.excluded ?? {});
               setConfig(state.config);
+              setGuessBasis(state.guessBasis ?? '');
               setMerged(state.merged ?? null);
               setAutoReport(state.autoReport ?? null);
               setAutoMelt(state.autoMelt ?? []);
