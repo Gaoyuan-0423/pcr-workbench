@@ -9,6 +9,7 @@ import type { MeltGeneSummary, MeltTableState } from './core/melt';
 import { parseMeltSummaryTable } from './core/melt';
 import { readInputFile, sheetToRawMatrix } from './core/parse';
 import { mergeFileMatrices, type FileMatrixInput, type PerFileInfo } from './core/merge';
+import { resolveNumericColumns } from './core/number';
 import MergeSummaryPanel from './ui/MergeSummaryPanel';
 import ProjectsDialog from './ui/ProjectsDialog';
 import { computeQcFlags } from './core/qc';
@@ -412,10 +413,17 @@ export default function App() {
     : mappingComplete(mapping);
   const canGoResults =
     canGoConfig && config.refGenes.length > 0 && !!out && out.results.length > 0;
+  const numericNotes = useMemo(() => merged
+    ? inputMatrices.flatMap((input) => {
+        const s = sniff(input.matrix);
+        return resolveNumericColumns(input.matrix.slice(s.headerRow + 1), s.mapping).notes.map((note) => ({ ...note, fileName: input.fileName }));
+      })
+    : matrix.length ? resolveNumericColumns(matrix.slice(headerRow + 1), mapping).notes : [],
+  [merged, inputMatrices, matrix, headerRow, mapping]);
   const currentReport = useMemo(() => out ? buildQualityReport({
-    rows, flags, output: out, mappingComplete: canGoConfig, headerRow,
+    rows, flags, output: out, mappingComplete: canGoConfig, headerRow, numericNotes,
     guess: { controlSamples: out.controlSamples, refGenes: out.refGenesUsed, basis: guessBasis },
-  }) : null, [out, rows, flags, canGoConfig, headerRow, guessBasis]);
+  }) : null, [out, rows, flags, canGoConfig, headerRow, numericNotes, guessBasis]);
   const analysisIdentity = useMemo(() => JSON.stringify([rows, config, out, currentReport, autoMelt]), [rows, config, out, currentReport, autoMelt]);
   function invalidateDesignConfirmation() {
     setConfig((prev) => prev.experimentalDesign ? { ...prev,

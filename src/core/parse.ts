@@ -22,7 +22,8 @@ function cellToText(v: unknown): string {
   if (v == null) return '';
   if (v instanceof Date) return v.toISOString().slice(0, 10);
   if (typeof v === 'number') {
-    return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e10) / 1e10);
+    // Shortest round-trip text: rounding here would turn a 1e-12 standard into 0.
+    return String(v);
   }
   return String(v).trim();
 }

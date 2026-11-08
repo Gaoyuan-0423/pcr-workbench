@@ -12,6 +12,7 @@ import type {
   SampleTargetResult,
 } from './types';
 import { mean, sd, dunnettAdjustedP, oneWayAnova, significanceStars, welchTTest } from './stats';
+import { parseCq, parseQuantity, resolveNumericColumns } from './number';
 // isStandardRow 定义于本文件（standard.ts 反向引用），避免循环依赖
 
 export interface AnalysisRow {
@@ -31,6 +32,7 @@ export interface AnalysisRow {
 /** 从原始数据行 + 列映射抽取规范行。 */
 export function extractRows(rows: string[][], mapping: ColumnMapping): AnalysisRow[] {
   const out: AnalysisRow[] = [];
+  const { quantityDecimal } = resolveNumericColumns(rows, mapping);
   rows.forEach((row, idx) => {
     const id = idx + 1;
     out.push({
@@ -42,8 +44,8 @@ export function extractRows(rows: string[][], mapping: ColumnMapping): AnalysisR
       pairId: mapping.pairId >= 0 ? (row[mapping.pairId] ?? '').trim() : '',
       target: mapping.target >= 0 ? (row[mapping.target] ?? '').trim() : '',
       task: mapping.task >= 0 ? (row[mapping.task] ?? '').trim() : '',
-      cq: mapping.cq >= 0 ? Number.parseFloat((row[mapping.cq] ?? '').replace(',', '.')) : NaN,
-      quantity: mapping.quantity >= 0 ? Number.parseFloat((row[mapping.quantity] ?? '').replace(',', '.')) : NaN,
+      cq: mapping.cq >= 0 ? parseCq(row[mapping.cq] ?? '') : NaN,
+      quantity: mapping.quantity >= 0 ? parseQuantity(row[mapping.quantity] ?? '', quantityDecimal) : NaN,
       excluded: false,
     });
   });
