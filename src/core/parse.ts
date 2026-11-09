@@ -4,9 +4,17 @@ import type { SheetMatrix } from './types';
 
 const EXCEL_EXTS = new Set(['xlsx', 'xls', 'xlsm', 'xlsb']);
 
-/** 纯文本解码：优先 UTF-8（严格模式），失败回落 GBK（国产仪器 Windows 导出常见编码）。 */
+/**
+ * 纯文本解码：先认 BOM（UTF-8 / UTF-16LE / UTF-16BE），再识别无 BOM 的 UTF-16
+ * （ASCII 字符的高字节为 0，NUL 集中在奇数或偶数位），其余优先 UTF-8（严格模式），
+ * 失败回落 GBK（国产仪器 Windows 导出常见编码）。
+ * QuantStudio / Bio-Rad 等的部分 .txt 导出为 UTF-16LE：NUL 在 UTF-8 中合法，
+ * 不先判定就会解成每个字符间夹 \u0000 的文本，列识别全部失败。
+ */
 export function decodeText(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
+  const utf16 = utf16Encoding(bytes);
+  if (utf16) return new TextDecoder(utf16).decode(bytes);
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
@@ -16,6 +24,24 @@ export function decodeText(buffer: ArrayBuffer): string {
       return new TextDecoder('utf-8').decode(bytes);
     }
   }
+}
+
+function utf16Encoding(bytes: Uint8Array): 'utf-16le' | 'utf-16be' | null {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return 'utf-16le';
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return 'utf-16be';
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return null;
+  // 无 BOM：取前 1024 个码元，NUL 几乎只落在一侧时判为 UTF-16。
+  const pairs = Math.min(1024, Math.floor(bytes.length / 2));
+  if (pairs < 2) return null;
+  let evenNul = 0;
+  let oddNul = 0;
+  for (let i = 0; i < pairs; i += 1) {
+    if (bytes[2 * i] === 0) evenNul += 1;
+    if (bytes[2 * i + 1] === 0) oddNul += 1;
+  }
+  if (oddNul >= pairs * 0.4 && evenNul <= pairs * 0.05) return 'utf-16le';
+  if (evenNul >= pairs * 0.4 && oddNul <= pairs * 0.05) return 'utf-16be';
+  return null;
 }
 
 function cellToText(v: unknown): string {
