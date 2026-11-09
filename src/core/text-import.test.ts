@@ -40,3 +40,41 @@ describe('text tables are read verbatim (no locale type guessing)', () => {
     expect(matrix[2]).toEqual(['A2', '1.00E+05', 'GAPDH', '24.10']);
   });
 });
+
+describe('text encodings', () => {
+  const TSV = 'Well\tSample Name\tTarget Name\tCq\nA1\t对照\tGAPDH\t18.5\nA2\t处理\tGAPDH\t24.25\nA3\tS3\tACTB\tUndetermined\n';
+  const utf16le = (text: string) => Uint8Array.from(Buffer.from(text, 'utf16le'));
+  const utf16be = (text: string) => utf16le(text).map((_, i, b) => b[i ^ 1]);
+  const withBom = (bom: number[], body: Uint8Array) => Uint8Array.from([...bom, ...body]);
+
+  async function rowsFromBytes(name: string, bytes: Uint8Array<ArrayBuffer>) {
+    const input = await readInputFile(new File([bytes], name));
+    if (input.kind !== 'workbook') throw new Error('expected workbook');
+    const matrix = sheetToRawMatrix(input.wb, input.sheetNames[0]);
+    const { headerRow, mapping } = sniff(matrix);
+    return { matrix, rows: extractRows(matrix.slice(headerRow + 1), mapping) };
+  }
+
+  it.each([
+    ['UTF-16LE with BOM (QuantStudio .txt)', withBom([0xff, 0xfe], utf16le(TSV))],
+    ['UTF-16BE with BOM', withBom([0xfe, 0xff], utf16be(TSV))],
+    ['UTF-16LE without BOM', utf16le(TSV)],
+    ['UTF-8 with BOM', withBom([0xef, 0xbb, 0xbf], new TextEncoder().encode(TSV))],
+    ['UTF-8', new TextEncoder().encode(TSV)],
+  ])('%s', async (_label, bytes) => {
+    const { matrix, rows } = await rowsFromBytes('results.txt', bytes);
+    expect(matrix[0][0]).toBe('Well');
+    expect(matrix.flat().join('')).not.toContain('\u0000');
+    expect(rows.map((r) => r.sample)).toEqual(['对照', '处理', 'S3']);
+    expect(rows.map((r) => r.cq)).toEqual([18.5, 24.25, NaN]);
+  });
+
+  it('GBK exports still decode', async () => {
+    // "对照" / "处理" in GBK
+    const gbk = (s: string) => s.replace('对照', '\u0001').replace('处理', '\u0002');
+    const ascii = new TextEncoder().encode(gbk(TSV));
+    const bytes = new Uint8Array([...ascii].flatMap((b) => (b === 1 ? [0xb6, 0xd4, 0xd5, 0xd5] : b === 2 ? [0xb4, 0xa6, 0xc0, 0xed] : [b])));
+    const { rows } = await rowsFromBytes('results.txt', bytes);
+    expect(rows.map((r) => r.sample)).toEqual(['对照', '处理', 'S3']);
+  });
+});
