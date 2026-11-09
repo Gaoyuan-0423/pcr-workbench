@@ -112,7 +112,11 @@ export async function readInputFile(file: File): Promise<WorkbookFile | RdmlFile
       meltCurves: parsed.meltCurves,
     };
   }
-  const wb = XLSX.read(text, { type: 'string', raw: false });
+  // raw:true keeps every text cell verbatim. raw:false lets SheetJS guess types by
+  // locale: "23,45" became 2345 and sample names such as "1/10" became date serials
+  // (which the standard curve then read as concentration 36901). Numbers are parsed
+  // by number.ts (parseCq / parseQuantity), which already handles decimal commas.
+  const wb = XLSX.read(text, { type: 'string', raw: true });
   return { kind: 'workbook', fileName: file.name, sheetNames: wb.SheetNames, wb };
 }
 
